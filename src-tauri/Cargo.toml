@@ -1,0 +1,45 @@
+[package]
+name = "biblepro"
+version = "0.1.0"
+description = "A Tauri App"
+authors = ["you"]
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "biblepro_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusqlite = { version = "0.31", features = ["bundled"] }
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+tokio = { version = "1", features = ["rt-multi-thread"] }
+
+# Presentation / NDI rendering
+tiny-skia  = "0.11"
+ab_glyph   = "0.2"
+base64     = "0.22"
+
+# Licensing
+jsonwebtoken = "9"
+keyring      = { version = "3", features = ["apple-native", "windows-native", "linux-native"] }
+sha2         = "0.10"
+uuid         = { version = "1", features = ["v4"] }
+
+[features]
+# Enable with: cargo tauri dev --features ndi
+# Requires NewTek/Vizrt NDI SDK installed (libndi.so / ndi.dll).
+ndi = []
+

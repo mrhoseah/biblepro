@@ -1,0 +1,67 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * { box-sizing: border-box; }
+
+  html, body, #root {
+    @apply h-screen w-screen overflow-hidden;
+    background: #0C0C17;
+    color: #E2DFEE;
+    font-family: 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { @apply bg-surface-600 rounded-full; }
+  ::-webkit-scrollbar-thumb:hover { @apply bg-surface-500; }
+
+  ::selection { background: rgba(200,160,80,.25); }
+
+  /* Tauri drag region */
+  [data-tauri-drag-region] { -webkit-app-region: drag; }
+  [data-tauri-drag-region] * { -webkit-app-region: no-drag; }
+}
+
+@layer utilities {
+  .text-balance { text-wrap: balance; }
+
+  /* Verse text — larger, readable */
+  .verse-body {
+    font-size: 17px;
+    line-height: 1.8;
+    font-weight: 400;
+    letter-spacing: 0.01em;
+  }
+
+  /* Scripture reference styling */
+  .ref-tag {
+    @apply text-accent text-xs font-semibold tracking-wide;
+  }
+
+  /* Live indicator pulse */
+  .live-dot {
+    @apply w-2 h-2 rounded-full bg-live;
+    box-shadow: 0 0 6px theme('colors.live');
+    animation: pulse-dot 1.8s ease-in-out infinite;
+  }
+
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  /* Slide thumbnail */
+  .slide-thumb {
+    @apply rounded-lg overflow-hidden border border-bdr;
+    aspect-ratio: 16/9;
+    background: #000;
+  }
+
+  /* Panel inset */
+  .inset-panel {
+    @apply bg-surface-800 border border-bdr rounded-lg;
+  }
+}

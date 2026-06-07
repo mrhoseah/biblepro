@@ -1,4 +1,6 @@
+use super::catalog::{self, CatalogEntry};
 use super::db::BibleDb;
+use super::seeder;
 use rusqlite::{types::ValueRef, Connection};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -33,6 +35,107 @@ struct ThiagoBook {
 #[derive(Deserialize)]
 struct SimpleBook {
     chapters: Vec<Vec<String>>,
+}
+
+// ── catalog + simplified install/import ───────────────────────────────────────
+
+#[tauri::command]
+pub fn list_bible_catalog() -> Vec<CatalogEntry> {
+    catalog::entries().to_vec()
+}
+
+/// One-click install from the built-in catalog (downloads over HTTPS or uses bundled data).
+#[tauri::command]
+pub async fn install_bible(
+    db: State<'_, BibleDb>,
+    translation_id: String,
+) -> Result<ImportResult, String> {
+    let key = translation_id.trim().to_lowercase();
+    let entry = catalog::by_id(&key).ok_or_else(|| format!("Unknown Bible: {key}"))?;
+
+    if entry.bundled {
+        let conn = db.0.lock().unwrap();
+        let verses = seeder::seed_translation(
+            &conn,
+            entry.id,
+            entry.name,
+            entry.abbreviation,
+            entry.language,
+            include_bytes!("../../resources/en_kjv.json"),
+        )?;
+        if verses > 0 {
+            return Ok(ImportResult {
+                translation_id: entry.id.to_string(),
+                verses_imported: verses,
+                message: format!(
+                    "Installed {} with {} verses. Ready offline.",
+                    entry.abbreviation, verses
+                ),
+            });
+        }
+        drop(conn);
+        let existing: i64 = db
+            .0
+            .lock()
+            .unwrap()
+            .query_row(
+                "SELECT COUNT(*) FROM verses WHERE translation_id = ?1",
+                [entry.id],
+                |r| r.get(0),
+            )
+            .unwrap_or(0);
+        if existing > 0 {
+            return Ok(ImportResult {
+                translation_id: entry.id.to_string(),
+                verses_imported: existing as usize,
+                message: format!("{} is already installed.", entry.name),
+            });
+        }
+    }
+
+    install_bible_from_url(
+        db,
+        InstallBibleRequest {
+            translation_id: entry.id.to_string(),
+            translation_name: entry.name.to_string(),
+            abbreviation: entry.abbreviation.to_string(),
+            language: entry.language.to_string(),
+            source_url: catalog::source_url(entry),
+        },
+    )
+    .await
+}
+
+/// Pick a Bible file and import it. Translation metadata is inferred from the filename when possible.
+#[tauri::command]
+pub async fn import_bible_file(
+    app: tauri::AppHandle,
+    db: State<'_, BibleDb>,
+) -> Result<ImportResult, String> {
+    let path = app
+        .dialog()
+        .file()
+        .add_filter(
+            "Bible files",
+            &[
+                "json", "sqlite", "sqlite3", "db", "bbl", "bblx", "bible", "txt", "tsv", "csv",
+            ],
+        )
+        .blocking_pick_file()
+        .ok_or("No file selected")?;
+
+    let path_str = path.to_string();
+    let data = std::fs::read(&path_str).map_err(|e| e.to_string())?;
+    let (translation_id, translation_name, language) =
+        catalog::infer_import_metadata(Path::new(&path_str));
+    import_from_path_or_bytes(
+        &db,
+        Path::new(&path_str),
+        &data,
+        &translation_id,
+        &translation_name,
+        &language,
+    )
 }
 
 // ── file-dialog import ────────────────────────────────────────────────────────

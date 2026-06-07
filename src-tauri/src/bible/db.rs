@@ -1,4 +1,5 @@
 use super::schema::create_schema;
+use super::seeder;
 use rusqlite::Connection;
 use std::sync::Mutex;
 
@@ -8,7 +9,9 @@ impl BibleDb {
     pub fn open(path: &std::path::Path) -> Result<Self, rusqlite::Error> {
         let conn = Connection::open(path)?;
         create_schema(&conn)?;
-        // No bundled data — all translations are downloaded or imported by the user.
+        if let Err(err) = seeder::seed_bundled(&conn) {
+            eprintln!("[bible] bundled seed failed: {err}");
+        }
         Ok(Self(Mutex::new(conn)))
     }
 }

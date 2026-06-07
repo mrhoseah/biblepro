@@ -85,14 +85,37 @@ fn abbrev_map() -> HashMap<&'static str, i32> {
     pairs.iter().cloned().collect()
 }
 
-/// Inserts KJV data from the thiagobodruk JSON bytes into an open connection.
-/// Kept for potential future use; auto-seeding is disabled — all translations are user-downloaded.
-#[allow(dead_code)]
-pub fn seed_kjv(conn: &Connection, json_bytes: &[u8]) -> Result<usize, String> {
+/// Seed bundled translations when the database has no Bible text yet.
+pub fn seed_bundled(conn: &Connection) -> Result<usize, String> {
+    let translations: i64 = conn
+        .query_row("SELECT COUNT(*) FROM translations", [], |r| r.get(0))
+        .unwrap_or(0);
+    if translations > 0 {
+        return Ok(0);
+    }
+    seed_translation(
+        conn,
+        "kjv",
+        "King James Version",
+        "KJV",
+        "en",
+        include_bytes!("../../resources/en_kjv.json"),
+    )
+}
+
+/// Insert a thiagobodruk-format Bible from JSON bytes.
+pub fn seed_translation(
+    conn: &Connection,
+    translation_id: &str,
+    translation_name: &str,
+    abbreviation: &str,
+    language: &str,
+    json_bytes: &[u8],
+) -> Result<usize, String> {
     let already: i64 = conn
         .query_row(
-            "SELECT COUNT(*) FROM verses WHERE translation_id = 'kjv'",
-            [],
+            "SELECT COUNT(*) FROM verses WHERE translation_id = ?1",
+            [translation_id],
             |r| r.get(0),
         )
         .unwrap_or(0);
@@ -101,7 +124,6 @@ pub fn seed_kjv(conn: &Connection, json_bytes: &[u8]) -> Result<usize, String> {
         return Ok(0);
     }
 
-    // Strip UTF-8 BOM if present
     let bytes = if json_bytes.starts_with(b"\xef\xbb\xbf") {
         &json_bytes[3..]
     } else {
@@ -109,12 +131,12 @@ pub fn seed_kjv(conn: &Connection, json_bytes: &[u8]) -> Result<usize, String> {
     };
 
     let books: Vec<ThiagoBook> =
-        serde_json::from_slice(bytes).map_err(|e| format!("KJV JSON parse error: {e}"))?;
+        serde_json::from_slice(bytes).map_err(|e| format!("Bible JSON parse error: {e}"))?;
 
     conn.execute(
         "INSERT OR IGNORE INTO translations (id, name, abbreviation, language)
-         VALUES ('kjv', 'King James Version', 'KJV', 'en')",
-        [],
+         VALUES (?1, ?2, ?3, ?4)",
+        rusqlite::params![translation_id, translation_name, abbreviation, language],
     )
     .map_err(|e| e.to_string())?;
 
@@ -132,7 +154,7 @@ pub fn seed_kjv(conn: &Connection, json_bytes: &[u8]) -> Result<usize, String> {
         let book_id = match map.get(abbrev.as_str()) {
             Some(id) => *id,
             None => {
-                eprintln!("[seeder] unknown abbrev '{}', skipping", abbrev);
+                eprintln!("[seeder] unknown abbrev '{abbrev}', skipping");
                 continue;
             }
         };
@@ -141,7 +163,7 @@ pub fn seed_kjv(conn: &Connection, json_bytes: &[u8]) -> Result<usize, String> {
             for (v_idx, text) in chapter.iter().enumerate() {
                 let verse_num = (v_idx + 1) as i32;
                 stmt.execute(rusqlite::params![
-                    "kjv",
+                    translation_id,
                     book_id,
                     chapter_num,
                     verse_num,

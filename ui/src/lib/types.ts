@@ -59,6 +59,16 @@ export interface InstallBibleRequest {
   source_url: string;
 }
 
+export interface BibleCatalogEntry {
+  id: string;
+  name: string;
+  abbreviation: string;
+  language: string;
+  language_name: string;
+  category: string;
+  bundled: boolean;
+}
+
 // ── Present / Config ──────────────────────────────────────────────────────────
 
 export interface Rgba { r: number; g: number; b: number; a: number }

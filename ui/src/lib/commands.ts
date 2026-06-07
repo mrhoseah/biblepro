@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import type {
   Translation, Book, Verse, ChapterInfo, SearchResult, DbStats, ImportResult,
-  InstallBibleRequest,
+  InstallBibleRequest, BibleCatalogEntry,
   PresentConfig, PreviewResult,
   OutputInfo, MonitorInfo, OutputRole, OutputSource, RoleLayout, ScriptureMode,
   TransitionTarget, CountdownSchedule, CountdownRotation, CountdownDef,
@@ -42,6 +42,15 @@ export const importFromJson = (jsonStr: string, translationId: string, translati
 
 export const pickAndImport = (translationId: string, translationName: string, language: string) =>
   invoke<ImportResult>('pick_and_import', { translationId, translationName, language });
+
+export const importBibleFile = () =>
+  invoke<ImportResult>('import_bible_file');
+
+export const listBibleCatalog = () =>
+  invoke<BibleCatalogEntry[]>('list_bible_catalog');
+
+export const installBible = (translationId: string) =>
+  invoke<ImportResult>('install_bible', { translationId });
 
 export const installBibleFromUrl = (request: InstallBibleRequest) =>
   invoke<ImportResult>('install_bible_from_url', { request });

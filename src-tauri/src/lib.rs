@@ -9,7 +9,10 @@ mod songs;
 
 use bible::{
     db::BibleDb,
-    importer::{import_from_json, install_bible_from_url, pick_and_import, remove_translation},
+    importer::{
+        import_bible_file, import_from_json, install_bible, install_bible_from_url,
+        list_bible_catalog, pick_and_import, remove_translation,
+    },
     lookup::{get_books, get_chapter, get_db_stats, get_translations, get_verse},
     search::{search_by_reference, search_verses},
     study::{
@@ -104,6 +107,9 @@ pub fn run() {
             search_by_reference,
             import_from_json,
             pick_and_import,
+            import_bible_file,
+            list_bible_catalog,
+            install_bible,
             install_bible_from_url,
             remove_translation,
             // Study

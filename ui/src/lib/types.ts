@@ -163,18 +163,22 @@ export interface Tag { id: number; name: string; color: string }
 
 // ── Songs ─────────────────────────────────────────────────────────────────────
 
+export interface SongSection {
+  id: string;
+  label: string;
+  lyrics: string;
+}
+
 export interface Song {
   id: number;
   title: string;
   artist: string;
+  ccli?: string | null;
+  copyright?: string | null;
   key: string;
-  tags: string[];
-  created_at: number;
-}
-
-export interface SongSection {
-  label: string; // "Verse 1", "Chorus", "Bridge"
-  lyrics: string;
+  tempo: string;
+  arrangement: string[];
+  sections: SongSection[];
 }
 
 // ── Production engine ─────────────────────────────────────────────────────────
@@ -223,6 +227,45 @@ export interface ScheduleStatus {
   ready: boolean;
 }
 
+export interface CountdownRotation {
+  enabled: boolean;
+  items: string[];
+  interval_secs: number;
+}
+
+export interface MediaPlaylist {
+  random_mode: boolean;
+  interval_secs: number;
+}
+
+export interface ThemeAssignment {
+  content_type: string;
+  media_id: string;
+  theme_id: string;
+}
+
+export interface MediaSettings {
+  playlist: MediaPlaylist;
+  theme_assignments: ThemeAssignment[];
+}
+
+export type PlanItemKind =
+  | { type: 'verse'; translation_id: string; book_id: number; chapter: number; verse: number; reference: string; text: string }
+  | { type: 'song'; song_id: number; title: string; section_label?: string | null }
+  | { type: 'countdown'; countdown_id: string; name: string }
+  | { type: 'media'; media_id: string; title: string }
+  | { type: 'blank'; label: string };
+
+export interface ServicePlanItem {
+  id: string;
+  kind: PlanItemKind;
+}
+
+export interface ServicePlan {
+  name: string;
+  items: ServicePlanItem[];
+}
+
 export interface ProductionTheme {
   id: string;
   name: string;
@@ -244,6 +287,9 @@ export interface ProductionSnapshot {
   custom_countdown_count: number;
   custom_media_count: number;
   schedule?: ScheduleStatus;
+  rotation?: CountdownRotation;
+  media_settings?: MediaSettings;
+  service_plan?: ServicePlan;
 }
 
 export interface ProductionPreview extends PreviewResult {

@@ -35,6 +35,14 @@ impl MediaStore {
         }
     }
 
+    pub fn load_custom(&self, items: Vec<StoredMedia>) {
+        *self.custom.lock().unwrap() = items;
+    }
+
+    pub fn custom_items(&self) -> Vec<StoredMedia> {
+        self.custom.lock().unwrap().clone()
+    }
+
     pub fn motion_time_ms(&self) -> u128 {
         self.motion_start.elapsed().as_millis()
     }

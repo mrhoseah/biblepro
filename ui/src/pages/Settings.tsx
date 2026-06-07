@@ -1,16 +1,24 @@
 import { useState, useEffect } from 'react';
-import { getLicenseStatus, deactivateLicense, activateLicense } from '../lib/commands';
-import type { LicenseStatus } from '../lib/types';
+import { getLicenseStatus, deactivateLicense, activateLicense, getPresentConfig, setPresentConfig } from '../lib/commands';
+import type { LicenseStatus, PresentConfig, Template } from '../lib/types';
 
 export default function Settings() {
   const [license, setLicense] = useState<LicenseStatus | null>(null);
   const [tokenInput, setTokenInput] = useState('');
   const [activating, setActivating] = useState(false);
   const [msg, setMsg] = useState('');
+  const [present, setPresent] = useState<PresentConfig | null>(null);
 
   useEffect(() => {
     getLicenseStatus().then(setLicense).catch(() => {});
+    getPresentConfig().then(setPresent).catch(() => {});
   }, []);
+
+  const savePresent = async () => {
+    if (!present) return;
+    await setPresentConfig(present);
+    setMsg('Presentation settings saved.');
+  };
 
   const handleActivate = async () => {
     if (!tokenInput.trim()) return;
@@ -104,6 +112,58 @@ export default function Settings() {
             )}
           </div>
         </section>
+
+        {/* Present designer */}
+        {present && (
+          <section className="inset-panel overflow-hidden">
+            <div className="px-4 py-3 border-b border-bdr flex items-center justify-between">
+              <span className="text-xs font-bold text-ink uppercase tracking-wider">Presentation Designer</span>
+              <button onClick={savePresent} className="px-3 py-1 bg-accent text-surface-950 rounded text-2xs font-bold">Save</button>
+            </div>
+            <div className="p-4 grid gap-3 sm:grid-cols-2">
+              <label className="text-xs text-ink-muted">
+                Template
+                <select
+                  value={present.template}
+                  onChange={e => setPresent({ ...present, template: e.target.value as Template })}
+                  className="mt-1 w-full bg-surface-700 border border-bdr rounded-md px-2 py-1.5 text-xs text-ink"
+                >
+                  {(['FullScreen', 'LowerThird', 'LowerThirdAccent', 'LowerThirdSplit', 'CardCenter', 'MinimalText'] as const).map(t => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs text-ink-muted">
+                NDI name
+                <input
+                  value={present.ndi_name}
+                  onChange={e => setPresent({ ...present, ndi_name: e.target.value })}
+                  className="mt-1 w-full bg-surface-700 border border-bdr rounded-md px-2 py-1.5 text-xs text-ink"
+                />
+              </label>
+              <label className="text-xs text-ink-muted">
+                Width
+                <input type="number" value={present.width} onChange={e => setPresent({ ...present, width: Number(e.target.value) })}
+                  className="mt-1 w-full bg-surface-700 border border-bdr rounded-md px-2 py-1.5 text-xs text-ink" />
+              </label>
+              <label className="text-xs text-ink-muted">
+                Height
+                <input type="number" value={present.height} onChange={e => setPresent({ ...present, height: Number(e.target.value) })}
+                  className="mt-1 w-full bg-surface-700 border border-bdr rounded-md px-2 py-1.5 text-xs text-ink" />
+              </label>
+              <label className="text-xs text-ink-muted">
+                Verse font size
+                <input type="number" value={present.verse_font_size} onChange={e => setPresent({ ...present, verse_font_size: Number(e.target.value) })}
+                  className="mt-1 w-full bg-surface-700 border border-bdr rounded-md px-2 py-1.5 text-xs text-ink" />
+              </label>
+              <label className="text-xs text-ink-muted">
+                Reference font size
+                <input type="number" value={present.reference_font_size} onChange={e => setPresent({ ...present, reference_font_size: Number(e.target.value) })}
+                  className="mt-1 w-full bg-surface-700 border border-bdr rounded-md px-2 py-1.5 text-xs text-ink" />
+              </label>
+            </div>
+          </section>
+        )}
 
         {/* Plan comparison */}
         <section className="grid grid-cols-3 gap-3">

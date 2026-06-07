@@ -1,19 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Download, Edit3, Eye, FileInput, Layers, Music, Plus, Radio, Save, Search, ShieldCheck, Sparkles, X } from 'lucide-react';
-import { clearAll, pushToAll } from '../lib/commands';
-
-type SongSection = { id: string; label: string; lyrics: string };
-type Song = {
-  id: number;
-  title: string;
-  artist: string;
-  ccli?: string;
-  copyright?: string;
-  key: string;
-  tempo: string;
-  arrangement: string[];
-  sections: SongSection[];
-};
+import { clearAll, listSongs, pushToAll, saveSong } from '../lib/commands';
+import type { Song, SongSection } from '../lib/types';
 
 const DEMO_SONGS: Song[] = [
   {
@@ -68,18 +56,32 @@ function cloneSong(song: Song): Song {
 }
 
 export default function Songs() {
-  const [songs, setSongs] = useState(DEMO_SONGS);
+  const [songs, setSongs] = useState<Song[]>([]);
   const [search, setSearch] = useState('');
-  const [selectedId, setSelectedId] = useState(DEMO_SONGS[0]?.id ?? 0);
+  const [selectedId, setSelectedId] = useState(0);
   const [stagedId, setStagedId] = useState<string | null>(null);
   const [liveId, setLiveId] = useState<string | null>(null);
   const [status, setStatus] = useState('');
   const [tab, setTab] = useState<(typeof SONG_TABS)[number]>('Library');
   const [songSelectQuery, setSongSelectQuery] = useState('');
 
+  useEffect(() => {
+    listSongs()
+      .then(list => {
+        setSongs(list);
+        if (list[0]) {
+          setSelectedId(list[0].id);
+          setStagedId(list[0].arrangement[0] ?? null);
+        }
+      })
+      .catch(() => setSongs(DEMO_SONGS));
+  }, []);
+
   const selected = songs.find(song => song.id === selectedId) ?? songs[0];
   const arranged = useMemo(
-    () => selected.arrangement.map(id => selected.sections.find(section => section.id === id)).filter(Boolean) as SongSection[],
+    () => selected
+      ? selected.arrangement.map(id => selected.sections.find(section => section.id === id)).filter(Boolean) as SongSection[]
+      : [],
     [selected],
   );
   const staged = arranged.find(section => section.id === stagedId) ?? arranged[0];
@@ -108,12 +110,24 @@ export default function Songs() {
     setStagedId(id);
   };
 
-  const addSong = () => {
-    const song = cloneSong(DEMO_SONGS[0]);
+  const persistSong = async (song: Song) => {
+    const saved = await saveSong(song);
+    setSongs(current => {
+      const next = current.some(s => s.id === saved.id)
+        ? current.map(s => s.id === saved.id ? saved : s)
+        : [saved, ...current];
+      return next;
+    });
+    setStatus(`Saved ${saved.title}`);
+  };
+
+  const addSong = async () => {
+    const base = songs[0] ?? DEMO_SONGS[0];
+    const song = cloneSong(base);
     song.id = Date.now();
     song.title = 'New Song';
     song.artist = 'BiblePro Library';
-    setSongs(current => [song, ...current]);
+    await persistSong(song);
     setSelectedId(song.id);
     setStagedId(song.arrangement[0]);
   };
@@ -130,6 +144,10 @@ export default function Songs() {
     setLiveId(null);
     setStatus('Released to presentation/output background');
   };
+
+  if (!selected) {
+    return <div className="flex h-full items-center justify-center bg-surface-900 text-sm text-ink-faint">Loading songs…</div>;
+  }
 
   return (
     <div className="flex h-full bg-surface-900">
@@ -188,7 +206,7 @@ export default function Songs() {
             <button onClick={addSection} className="flex items-center gap-1.5 px-3 py-1.5 bg-surface-700 border border-bdr rounded-md text-xs text-ink hover:bg-surface-600">
               <Plus size={12} /> Section
             </button>
-            <button className="flex items-center gap-1.5 px-3 py-1.5 bg-surface-700 border border-bdr rounded-md text-xs text-ink hover:bg-surface-600">
+            <button onClick={() => persistSong(selected)} className="flex items-center gap-1.5 px-3 py-1.5 bg-surface-700 border border-bdr rounded-md text-xs text-ink hover:bg-surface-600">
               <Save size={12} /> Save
             </button>
           </div>

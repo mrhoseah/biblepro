@@ -176,7 +176,45 @@ fn draw_ring(
     }
 }
 
+fn draw_particles(pixmap: &mut Pixmap, w: f32, h: f32, progress: f32, color: &Rgba) {
+    let cx = w * 0.5;
+    let cy = h * 0.5;
+    let count = 28usize;
+    for i in 0..count {
+        let angle = (i as f32 / count as f32) * std::f32::consts::TAU;
+        let orbit = w * 0.28 + (i % 4) as f32 * w * 0.02;
+        let x = cx + angle.cos() * orbit;
+        let y = cy + angle.sin() * orbit * 0.55;
+        let active = (i as f32 / count as f32) <= progress;
+        let radius = if active { 5.0 } else { 2.5 };
+        let c = if active {
+            color.clone()
+        } else {
+            Rgba::new(color.r, color.g, color.b, 70)
+        };
+        let mut pb = PathBuilder::new();
+        pb.push_circle(x, y, radius);
+        if let Some(path) = pb.finish() {
+            let mut paint = Paint::default();
+            paint.set_color(to_color(&c));
+            paint.anti_alias = true;
+            pixmap.fill_path(&path, &paint, FillRule::Winding, Transform::identity(), None);
+        }
+    }
+}
+
 fn draw_loader_bar(pixmap: &mut Pixmap, w: f32, h: f32, progress: f32, loader: &str, color: &Rgba) {
+    let cx = w * 0.5;
+    let cy = h * 0.5;
+
+    if loader.contains("Circular") {
+        draw_ring(pixmap, cx, cy, h * 0.24, progress, color);
+    }
+
+    if loader.contains("Particles") {
+        draw_particles(pixmap, w, h, progress, color);
+    }
+
     let bar_y = h * 0.92;
     let bar_h = h * 0.012;
     let pad = w * 0.12;
@@ -347,7 +385,13 @@ pub fn render_countdown_frame(
 
     match countdown.def.style {
         CountdownStyle::Ring | CountdownStyle::Theme => {
-            draw_ring(&mut pixmap, cx, cy, h * 0.22, progress, &theme.timer_color);
+            if countdown.def.loader.contains("Circular") {
+                draw_ring(&mut pixmap, cx, cy, h * 0.24, progress, &theme.timer_color);
+            } else if countdown.def.loader.contains("Particles") {
+                draw_particles(&mut pixmap, w, h, progress, &theme.timer_color);
+            } else {
+                draw_ring(&mut pixmap, cx, cy, h * 0.22, progress, &theme.timer_color);
+            }
         }
         CountdownStyle::Loader => {
             if countdown.def.loader.contains("Pulse") {

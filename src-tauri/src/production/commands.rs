@@ -6,8 +6,10 @@ use crate::present::PresentState;
 
 use super::engine::ProductionManager;
 use super::models::{
-    CountdownDef, CountdownSchedule, ProductionPreview, ProductionSnapshot, TransitionTarget,
+    CountdownDef, CountdownRotation, CountdownSchedule, MediaSettings, ProductionPreview,
+    ProductionSnapshot, TransitionTarget,
 };
+use super::plan::ServicePlanItem;
 #[tauri::command]
 pub fn get_production_state(
     production: State<ProductionManager>,
@@ -187,4 +189,102 @@ pub fn set_countdown_schedule(
     schedule: CountdownSchedule,
 ) -> Result<ProductionSnapshot, String> {
     production.set_countdown_schedule(schedule, &outputs)
+}
+
+#[tauri::command]
+pub fn set_countdown_rotation(
+    production: State<ProductionManager>,
+    outputs: State<OutputManager>,
+    rotation: CountdownRotation,
+) -> Result<ProductionSnapshot, String> {
+    production.set_countdown_rotation(rotation, &outputs)
+}
+
+#[tauri::command]
+pub fn create_countdown(
+    production: State<ProductionManager>,
+    outputs: State<OutputManager>,
+    def: CountdownDef,
+) -> Result<ProductionSnapshot, String> {
+    production.create_countdown(def, &outputs)
+}
+
+#[tauri::command]
+pub fn update_countdown(
+    production: State<ProductionManager>,
+    outputs: State<OutputManager>,
+    def: CountdownDef,
+) -> Result<ProductionSnapshot, String> {
+    production.update_countdown(def, &outputs)
+}
+
+#[tauri::command]
+pub fn set_media_settings(
+    production: State<ProductionManager>,
+    outputs: State<OutputManager>,
+    settings: MediaSettings,
+) -> Result<ProductionSnapshot, String> {
+    production.set_media_settings(settings, &outputs)
+}
+
+#[tauri::command]
+pub fn apply_theme_assignment(
+    production: State<ProductionManager>,
+    outputs: State<OutputManager>,
+    content_type: String,
+) -> Result<ProductionSnapshot, String> {
+    production.apply_theme_assignment(&content_type, &outputs)
+}
+
+#[tauri::command]
+pub fn get_service_plan(production: State<ProductionManager>) -> super::plan::ServicePlan {
+    production.get_service_plan()
+}
+
+#[tauri::command]
+pub fn add_service_plan_item(
+    production: State<ProductionManager>,
+    outputs: State<OutputManager>,
+    item: ServicePlanItem,
+) -> Result<ProductionSnapshot, String> {
+    production.add_service_plan_item(item, &outputs)
+}
+
+#[tauri::command]
+pub fn remove_service_plan_item(
+    production: State<ProductionManager>,
+    outputs: State<OutputManager>,
+    id: String,
+) -> Result<ProductionSnapshot, String> {
+    production.remove_service_plan_item(&id, &outputs)
+}
+
+#[tauri::command]
+pub fn clear_service_plan(
+    production: State<ProductionManager>,
+    outputs: State<OutputManager>,
+) -> Result<ProductionSnapshot, String> {
+    production.clear_service_plan(&outputs)
+}
+
+#[tauri::command]
+pub fn add_verse_to_service_plan(
+    production: State<ProductionManager>,
+    outputs: State<OutputManager>,
+    translation_id: String,
+    book_id: i32,
+    chapter: i32,
+    verse: i32,
+    reference: String,
+    text: String,
+) -> Result<ProductionSnapshot, String> {
+    production.add_verse_to_plan(
+        &translation_id,
+        book_id,
+        chapter,
+        verse,
+        &reference,
+        &text,
+        &outputs,
+    )
 }

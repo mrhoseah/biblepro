@@ -1,3 +1,4 @@
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -12,10 +13,12 @@ use crate::present::renderer::{frame_to_png, render_frame, render_scripture_over
 
 use super::media_store::MediaStore;
 use super::models::{
-    CountdownDef, CountdownRuntime, CountdownSchedule, CountdownStatus, ProductionPreview,
-    ProductionSnapshot, TransitionTarget,
+    CountdownDef, CountdownRotation, CountdownRuntime, CountdownSchedule, CountdownStatus,
+    MediaSettings, ProductionPreview, ProductionSnapshot, TransitionTarget,
 };
+use super::plan::{PlanItemKind, ServicePlan, ServicePlanItem};
 use super::scheduler::{schedule_status, should_fire};
+use super::store;
 use super::packs::{export_countdown_pack, import_countdown_pack};
 use super::renderer::render_countdown_frame;
 use super::themes::{builtin_countdowns, theme_by_id};
@@ -34,12 +37,20 @@ struct ProductionInner {
     transition_target: TransitionTarget,
     custom_countdowns: Vec<CountdownDef>,
     schedule: CountdownSchedule,
+    rotation: CountdownRotation,
+    rotation_index: usize,
+    rotation_last_switch: Instant,
+    media_settings: MediaSettings,
+    service_plan: ServicePlan,
+    playlist_index: usize,
+    playlist_last_switch: Instant,
 }
 
 pub struct ProductionManager {
     inner: Mutex<ProductionInner>,
     compositor_started: AtomicBool,
     pub media_store: MediaStore,
+    app_data_dir: Mutex<Option<PathBuf>>,
 }
 
 impl ProductionManager {
@@ -54,10 +65,80 @@ impl ProductionManager {
                 transition_target: TransitionTarget::Media,
                 custom_countdowns: Vec::new(),
                 schedule: CountdownSchedule::default(),
+                rotation: CountdownRotation::default(),
+                rotation_index: 0,
+                rotation_last_switch: Instant::now(),
+                media_settings: MediaSettings::default(),
+                service_plan: ServicePlan::default(),
+                playlist_index: 0,
+                playlist_last_switch: Instant::now(),
             }),
             compositor_started: AtomicBool::new(false),
             media_store: MediaStore::new(),
+            app_data_dir: Mutex::new(None),
         }
+    }
+
+    pub fn init_library(&self, app_dir: &Path) {
+        *self.app_data_dir.lock().unwrap() = Some(app_dir.to_path_buf());
+        let lib = store::load(app_dir);
+        {
+            let mut inner = self.inner.lock().unwrap();
+            inner.custom_countdowns = lib.countdowns;
+            inner.schedule = lib.schedule;
+            inner.rotation = lib.rotation;
+            inner.rotation_index = 0;
+            inner.rotation_last_switch = Instant::now();
+            inner.media_settings = lib.media_settings;
+            inner.service_plan = lib.service_plan;
+            inner.playlist_index = 0;
+            inner.playlist_last_switch = Instant::now();
+        }
+        self.media_store.load_custom(lib.media);
+    }
+
+    fn data_dir(&self) -> Result<PathBuf, String> {
+        self.app_data_dir
+            .lock()
+            .unwrap()
+            .clone()
+            .ok_or_else(|| "Production library not initialized".into())
+    }
+
+    fn persist_countdowns(&self) -> Result<(), String> {
+        let dir = self.data_dir()?;
+        let items = self.inner.lock().unwrap().custom_countdowns.clone();
+        store::save_countdowns(&dir, &items)
+    }
+
+    fn persist_schedule(&self) -> Result<(), String> {
+        let dir = self.data_dir()?;
+        let schedule = self.inner.lock().unwrap().schedule.clone();
+        store::save_schedule(&dir, &schedule)
+    }
+
+    fn persist_rotation(&self) -> Result<(), String> {
+        let dir = self.data_dir()?;
+        let rotation = self.inner.lock().unwrap().rotation.clone();
+        store::save_rotation(&dir, &rotation)
+    }
+
+    fn persist_media(&self) -> Result<(), String> {
+        let dir = self.data_dir()?;
+        let items = self.media_store.custom_items();
+        store::save_media(&dir, &items)
+    }
+
+    fn persist_media_settings(&self) -> Result<(), String> {
+        let dir = self.data_dir()?;
+        let settings = self.inner.lock().unwrap().media_settings.clone();
+        store::save_media_settings(&dir, &settings)
+    }
+
+    fn persist_service_plan(&self) -> Result<(), String> {
+        let dir = self.data_dir()?;
+        let plan = self.inner.lock().unwrap().service_plan.clone();
+        store::save_service_plan(&dir, &plan)
     }
 
     pub fn start_compositor(app: AppHandle) {
@@ -114,6 +195,8 @@ impl ProductionManager {
                 }
 
                 production.check_schedule(&outputs);
+                production.tick_rotation();
+                production.tick_playlist();
 
                 if let Ok(layers) = production.build_layers(&outputs, &cfg) {
                     outputs.dispatch_routed(&app, &layers, &cfg);
@@ -168,23 +251,12 @@ impl ProductionManager {
     ) -> Result<LayerFrames, String> {
         let inner = self.inner.lock().unwrap();
         let base = self.compose_base_frame_inner(&inner, outputs, cfg)?;
-        let countdown = if inner.countdown.as_ref().is_some_and(|cd| {
-            matches!(
-                cd.status,
-                CountdownStatus::Running | CountdownStatus::Paused | CountdownStatus::Ended
-            )
-        }) {
-            inner
-                .countdown
-                .as_ref()
-                .map(|cd| {
-                    let theme = theme_by_id(&cd.def.theme_id);
-                    render_countdown_frame(cd, &theme, cfg)
-                })
-                .transpose()?
-        } else {
-            None
-        };
+        let countdown = countdown_for_render(&inner)
+            .map(|cd| {
+                let theme = theme_by_id(&cd.def.theme_id);
+                render_countdown_frame(&cd, &theme, cfg)
+            })
+            .transpose()?;
 
         let (scripture_full, scripture_overlay) = {
             let live = outputs.live_verse.lock().unwrap().clone();
@@ -220,14 +292,9 @@ impl ProductionManager {
         outputs: &OutputManager,
         cfg: &PresentConfig,
     ) -> Result<Frame, String> {
-        if let Some(cd) = inner.countdown.as_ref() {
-            if matches!(
-                cd.status,
-                CountdownStatus::Running | CountdownStatus::Paused | CountdownStatus::Ended
-            ) {
-                let theme = theme_by_id(&cd.def.theme_id);
-                return render_countdown_frame(cd, &theme, cfg);
-            }
+        if let Some(cd) = countdown_for_render(inner) {
+            let theme = theme_by_id(&cd.def.theme_id);
+            return render_countdown_frame(&cd, &theme, cfg);
         }
 
         if let Some(rf) = outputs.latest_presentation_frame() {
@@ -277,6 +344,45 @@ impl ProductionManager {
             custom_countdown_count: inner.custom_countdowns.len(),
             custom_media_count: self.media_store.custom_count(),
             schedule: schedule_status(&inner.schedule),
+            rotation: inner.rotation.clone(),
+            media_settings: inner.media_settings.clone(),
+            service_plan: inner.service_plan.clone(),
+        }
+    }
+
+    fn tick_playlist(&self) {
+        let mut inner = self.inner.lock().unwrap();
+        if !inner.media_live || !inner.media_settings.playlist.random_mode {
+            return;
+        }
+        let interval = inner.media_settings.playlist.interval_secs.max(5) as u64;
+        if inner.playlist_last_switch.elapsed().as_secs() < interval {
+            return;
+        }
+        let ids: Vec<String> = self
+            .media_store
+            .all_media()
+            .into_iter()
+            .map(|m| m.id)
+            .collect();
+        if ids.is_empty() {
+            return;
+        }
+        inner.playlist_index = (inner.playlist_index + 1) % ids.len();
+        inner.current_media_id = Some(ids[inner.playlist_index].clone());
+        inner.playlist_last_switch = Instant::now();
+    }
+
+    fn tick_rotation(&self) {
+        let mut inner = self.inner.lock().unwrap();
+        let running = inner.countdown.as_ref().is_some_and(|cd| cd.status == CountdownStatus::Running);
+        if !running || !inner.rotation.enabled || inner.rotation.items.is_empty() {
+            return;
+        }
+        let interval = inner.rotation.interval_secs.max(1) as u64;
+        if inner.rotation_last_switch.elapsed().as_secs() >= interval {
+            inner.rotation_index = (inner.rotation_index + 1) % inner.rotation.items.len();
+            inner.rotation_last_switch = Instant::now();
         }
     }
 
@@ -303,7 +409,13 @@ impl ProductionManager {
 
     pub fn all_countdowns(&self) -> Vec<CountdownDef> {
         let mut items = builtin_countdowns();
-        items.extend(self.inner.lock().unwrap().custom_countdowns.clone());
+        for custom in &self.inner.lock().unwrap().custom_countdowns {
+            if let Some(pos) = items.iter().position(|c| c.id == custom.id) {
+                items[pos] = custom.clone();
+            } else {
+                items.push(custom.clone());
+            }
+        }
         items
     }
 
@@ -435,7 +547,61 @@ impl ProductionManager {
             inner.schedule = schedule;
             self.snapshot_from_inner(&inner, outputs)
         };
+        self.persist_schedule()?;
         Ok(snap)
+    }
+
+    pub fn set_countdown_rotation(
+        &self,
+        rotation: CountdownRotation,
+        outputs: &OutputManager,
+    ) -> Result<ProductionSnapshot, String> {
+        let snap = {
+            let mut inner = self.inner.lock().unwrap();
+            inner.rotation = rotation;
+            inner.rotation_index = 0;
+            inner.rotation_last_switch = Instant::now();
+            self.snapshot_from_inner(&inner, outputs)
+        };
+        self.persist_rotation()?;
+        Ok(snap)
+    }
+
+    pub fn create_countdown(
+        &self,
+        def: CountdownDef,
+        outputs: &OutputManager,
+    ) -> Result<ProductionSnapshot, String> {
+        {
+            let mut inner = self.inner.lock().unwrap();
+            inner.custom_countdowns.retain(|c| c.id != def.id);
+            inner.custom_countdowns.push(def);
+        }
+        self.persist_countdowns()?;
+        Ok(self.snapshot(outputs))
+    }
+
+    pub fn update_countdown(
+        &self,
+        def: CountdownDef,
+        outputs: &OutputManager,
+    ) -> Result<ProductionSnapshot, String> {
+        {
+            let mut inner = self.inner.lock().unwrap();
+            inner.custom_countdowns.retain(|c| c.id != def.id);
+            inner.custom_countdowns.push(def.clone());
+            if inner.countdown.as_ref().is_some_and(|c| c.def.id == def.id) {
+                if let Some(cd) = inner.countdown.as_mut() {
+                    let remaining = cd.remaining_secs;
+                    let status = cd.status.clone();
+                    cd.def = def;
+                    cd.remaining_secs = remaining;
+                    cd.status = status;
+                }
+            }
+        }
+        self.persist_countdowns()?;
+        Ok(self.snapshot(outputs))
     }
 
     pub fn import_pack(
@@ -444,9 +610,12 @@ impl ProductionManager {
         outputs: &OutputManager,
     ) -> Result<ProductionSnapshot, String> {
         let def = import_countdown_pack(json)?;
-        let mut inner = self.inner.lock().unwrap();
-        inner.custom_countdowns.retain(|c| c.id != def.id);
-        inner.custom_countdowns.push(def);
+        {
+            let mut inner = self.inner.lock().unwrap();
+            inner.custom_countdowns.retain(|c| c.id != def.id);
+            inner.custom_countdowns.push(def);
+        }
+        self.persist_countdowns()?;
         Ok(self.snapshot(outputs))
     }
 
@@ -481,6 +650,7 @@ impl ProductionManager {
     ) -> Result<ProductionSnapshot, String> {
         self.media_store
             .import_image(app_dir, path, title, category)?;
+        self.persist_media()?;
         Ok(self.snapshot(outputs))
     }
 
@@ -494,7 +664,105 @@ impl ProductionManager {
     ) -> Result<ProductionSnapshot, String> {
         self.media_store
             .import_video(app_dir, path, title, category)?;
+        self.persist_media()?;
         Ok(self.snapshot(outputs))
+    }
+
+    pub fn set_media_settings(
+        &self,
+        settings: MediaSettings,
+        outputs: &OutputManager,
+    ) -> Result<ProductionSnapshot, String> {
+        {
+            let mut inner = self.inner.lock().unwrap();
+            inner.media_settings = settings;
+            inner.playlist_last_switch = Instant::now();
+        }
+        self.persist_media_settings()?;
+        Ok(self.snapshot(outputs))
+    }
+
+    pub fn apply_theme_assignment(
+        &self,
+        content_type: &str,
+        outputs: &OutputManager,
+    ) -> Result<ProductionSnapshot, String> {
+        let media_id = {
+            let inner = self.inner.lock().unwrap();
+            inner
+                .media_settings
+                .theme_assignments
+                .iter()
+                .find(|a| a.content_type == content_type)
+                .map(|a| a.media_id.clone())
+        };
+        if let Some(id) = media_id {
+            self.set_media(&id, outputs)?;
+        }
+        Ok(self.snapshot(outputs))
+    }
+
+    pub fn get_service_plan(&self) -> ServicePlan {
+        self.inner.lock().unwrap().service_plan.clone()
+    }
+
+    pub fn add_service_plan_item(
+        &self,
+        item: ServicePlanItem,
+        outputs: &OutputManager,
+    ) -> Result<ProductionSnapshot, String> {
+        {
+            let mut inner = self.inner.lock().unwrap();
+            inner.service_plan.items.push(item);
+        }
+        self.persist_service_plan()?;
+        Ok(self.snapshot(outputs))
+    }
+
+    pub fn remove_service_plan_item(
+        &self,
+        id: &str,
+        outputs: &OutputManager,
+    ) -> Result<ProductionSnapshot, String> {
+        {
+            let mut inner = self.inner.lock().unwrap();
+            inner.service_plan.items.retain(|i| i.id != id);
+        }
+        self.persist_service_plan()?;
+        Ok(self.snapshot(outputs))
+    }
+
+    pub fn clear_service_plan(&self, outputs: &OutputManager) -> Result<ProductionSnapshot, String> {
+        {
+            let mut inner = self.inner.lock().unwrap();
+            inner.service_plan.items.clear();
+        }
+        self.persist_service_plan()?;
+        Ok(self.snapshot(outputs))
+    }
+
+    pub fn add_verse_to_plan(
+        &self,
+        translation_id: &str,
+        book_id: i32,
+        chapter: i32,
+        verse: i32,
+        reference: &str,
+        text: &str,
+        outputs: &OutputManager,
+    ) -> Result<ProductionSnapshot, String> {
+        let item = ServicePlanItem {
+            id: uuid::Uuid::new_v4().to_string(),
+            kind: PlanItemKind::Verse {
+                translation_id: translation_id.into(),
+                book_id,
+                chapter,
+                verse,
+                reference: reference.into(),
+                text: text.into(),
+            },
+        };
+        self.add_service_plan_item(item, outputs)
     }
 
     pub fn preview(
@@ -533,6 +801,22 @@ fn needs_compositor(production: &ProductionManager, outputs: &OutputManager) -> 
         || outputs.has_presentation_source()
         || outputs.live_verse.lock().unwrap().is_some()
         || has_outputs
+}
+
+fn countdown_for_render(inner: &ProductionInner) -> Option<CountdownRuntime> {
+    let cd = inner.countdown.as_ref()?;
+    if !matches!(
+        cd.status,
+        CountdownStatus::Running | CountdownStatus::Paused | CountdownStatus::Ended
+    ) {
+        return None;
+    }
+    let mut rt = cd.clone();
+    if inner.rotation.enabled && !inner.rotation.items.is_empty() {
+        let idx = inner.rotation_index % inner.rotation.items.len();
+        rt.def.subline = inner.rotation.items[idx].clone();
+    }
+    Some(rt)
 }
 
 fn active_layer_name(inner: &ProductionInner, outputs: &OutputManager) -> String {

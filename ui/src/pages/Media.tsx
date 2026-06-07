@@ -2,8 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { Film, Folder, Image, Layers, Monitor, Palette, Play, Radio, Search, Shuffle } from 'lucide-react';
 import { useProductionEngine } from '../hooks/useProductionEngine';
 import { open } from '@tauri-apps/plugin-dialog';
-import { importMediaFile, importVideoFile, listProductionMedia } from '../lib/commands';
-import type { MediaDef } from '../lib/types';
+import {
+  applyThemeAssignment, importMediaFile, importVideoFile,
+  listProductionMedia, listProductionThemes, setMediaSettings,
+} from '../lib/commands';
+import type { MediaDef, ProductionTheme, ThemeAssignment } from '../lib/types';
 
 type MediaType = 'image' | 'video' | 'color' | 'gradient';
 type ContentType = 'Scripture' | 'Songs' | 'Announcements' | 'Presentations' | 'Countdowns';
@@ -34,62 +37,14 @@ function toAsset(def: MediaDef): MediaAsset {
   };
 }
 
-type ThemePreset = {
-  id: string;
-  name: string;
-  contentType: ContentType;
-  background: string;
-  font: string;
-  layout: string;
-  overlay: string;
-  transition: string;
-};
-
 const CATEGORIES = ['All', 'Worship', 'Prayer', 'Youth', 'Conference', 'Christmas', 'Easter', 'Sermons', 'Scripture', 'Announcements', 'Countdowns'];
 
-
-const THEMES: ThemePreset[] = [
-  {
-    id: 'scripture-modern',
-    name: 'Modern Scripture',
-    contentType: 'Scripture',
-    background: 'Golden Clouds',
-    font: 'Montserrat Bold',
-    layout: 'Centered passage',
-    overlay: '40% darken + blur',
-    transition: 'Fade',
-  },
-  {
-    id: 'worship-motion',
-    name: 'Worship Lyrics',
-    contentType: 'Songs',
-    background: 'Blue Worship Motion',
-    font: 'Inter ExtraBold',
-    layout: 'Large centered lyrics',
-    overlay: '30% darken',
-    transition: 'Crossfade',
-  },
-  {
-    id: 'announcement-clean',
-    name: 'Announcement Theme',
-    contentType: 'Announcements',
-    background: 'Announcement Card',
-    font: 'Inter Semibold',
-    layout: 'Title + details card',
-    overlay: 'None',
-    transition: 'Slide up',
-  },
-  {
-    id: 'countdown-event',
-    name: 'Event Countdown',
-    contentType: 'Countdowns',
-    background: 'Conference Lines',
-    font: 'Montserrat Black',
-    layout: 'Clock focused',
-    overlay: '20% vignette',
-    transition: 'Loop',
-  },
-];
+const CONTENT_LABELS: Record<string, ContentType> = {
+  scripture: 'Scripture',
+  songs: 'Songs',
+  announcements: 'Announcements',
+  countdowns: 'Countdowns',
+};
 
 export default function Media() {
   const production = useProductionEngine(500);
@@ -98,13 +53,18 @@ export default function Media() {
   const [category, setCategory] = useState('All');
   const [selectedAsset, setSelectedAsset] = useState<MediaAsset | null>(null);
   const [status, setStatus] = useState('');
-  const [randomMode, setRandomMode] = useState(true);
+  const [themes, setThemes] = useState<ProductionTheme[]>([]);
+
+  const mediaSettings = production.snapshot?.media_settings;
+  const randomMode = mediaSettings?.playlist.random_mode ?? false;
+  const themeAssignments = mediaSettings?.theme_assignments ?? [];
 
   useEffect(() => {
-    listProductionMedia()
-      .then(defs => {
+    Promise.all([listProductionMedia(), listProductionThemes()])
+      .then(([defs, themeList]) => {
         const mapped = defs.map(toAsset);
         setAssets(mapped);
+        setThemes(themeList);
         if (!selectedAsset && mapped[0]) setSelectedAsset(mapped[0]);
       })
       .catch(() => setStatus('Failed to load media library'));
@@ -124,9 +84,8 @@ export default function Media() {
     });
   }, [category, query, assets]);
 
-  const selectedTheme = selectedAsset
-    ? THEMES.find(theme => theme.background === selectedAsset.title) ?? THEMES[0]
-    : THEMES[0];
+  const mediaTitle = (id: string) => assets.find(a => a.id === id)?.title ?? id;
+  const themeName = (id: string) => themes.find(t => t.id === id)?.name ?? id;
 
   return (
     <div className="grid h-full grid-rows-[auto_1fr] bg-surface-900">
@@ -167,8 +126,23 @@ export default function Media() {
             >
               <Film size={14} /> Import Video
             </button>
-            <button className="flex items-center gap-2 rounded-lg bg-accent px-3 py-2 text-xs font-black text-surface-950">
-              <Palette size={14} /> New Theme
+            <button
+              onClick={async () => {
+                if (!selectedAsset || !mediaSettings) return;
+                const updated = {
+                  ...mediaSettings,
+                  theme_assignments: mediaSettings.theme_assignments.map(a =>
+                    a.content_type === 'scripture'
+                      ? { ...a, media_id: selectedAsset.id, theme_id: themes[0]?.id ?? a.theme_id }
+                      : a,
+                  ),
+                };
+                await setMediaSettings(updated);
+                setStatus(`Assigned ${selectedAsset.title} to scripture theme`);
+              }}
+              className="flex items-center gap-2 rounded-lg bg-accent px-3 py-2 text-xs font-black text-surface-950"
+            >
+              <Palette size={14} /> Assign Theme
             </button>
           </div>
         </div>
@@ -210,7 +184,17 @@ export default function Media() {
           <div className="border-t border-bdr p-3">
             <p className="mb-2 text-2xs font-black uppercase tracking-wider text-ink-faint">Playback</p>
             <button
-              onClick={() => setRandomMode(value => !value)}
+              onClick={async () => {
+                if (!mediaSettings) return;
+                await setMediaSettings({
+                  ...mediaSettings,
+                  playlist: {
+                    ...mediaSettings.playlist,
+                    random_mode: !randomMode,
+                  },
+                });
+                setStatus(!randomMode ? 'Random playlist enabled' : 'Random playlist disabled');
+              }}
               className={[
                 'flex w-full items-center justify-between rounded-lg border px-3 py-2 text-xs font-bold',
                 randomMode ? 'border-accent/40 bg-accent/10 text-accent' : 'border-bdr bg-surface-800 text-ink-faint',
@@ -343,26 +327,24 @@ export default function Media() {
               <Palette size={13} /> Theme Assignments
             </p>
             <div className="space-y-3">
-              {THEMES.map(theme => (
-                <div
-                  key={theme.id}
-                  className={[
-                    'rounded-xl border p-3',
-                    selectedTheme.id === theme.id ? 'border-accent/50 bg-accent/10' : 'border-bdr bg-surface-800',
-                  ].join(' ')}
+              {themeAssignments.map((assignment: ThemeAssignment) => (
+                <button
+                  key={assignment.content_type}
+                  onClick={async () => {
+                    await applyThemeAssignment(assignment.content_type);
+                    setStatus(`Applied ${CONTENT_LABELS[assignment.content_type] ?? assignment.content_type} theme`);
+                  }}
+                  className="w-full rounded-xl border border-bdr bg-surface-800 p-3 text-left transition-all hover:border-accent/50"
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-black text-ink">{theme.name}</p>
-                    <span className="rounded-full bg-surface-900 px-2 py-0.5 text-2xs font-bold text-accent">{theme.contentType}</span>
+                    <p className="text-sm font-black text-ink capitalize">{CONTENT_LABELS[assignment.content_type] ?? assignment.content_type}</p>
+                    <span className="rounded-full bg-surface-900 px-2 py-0.5 text-2xs font-bold text-accent">Apply</span>
                   </div>
                   <div className="mt-2 space-y-1 text-xs text-ink-faint">
-                    <p>Background: <span className="text-ink-muted">{theme.background}</span></p>
-                    <p>Font: <span className="text-ink-muted">{theme.font}</span></p>
-                    <p>Layout: <span className="text-ink-muted">{theme.layout}</span></p>
-                    <p>Overlay: <span className="text-ink-muted">{theme.overlay}</span></p>
-                    <p>Transition: <span className="text-ink-muted">{theme.transition}</span></p>
+                    <p>Media: <span className="text-ink-muted">{mediaTitle(assignment.media_id)}</span></p>
+                    <p>Theme: <span className="text-ink-muted">{themeName(assignment.theme_id)}</span></p>
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           </section>

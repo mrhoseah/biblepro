@@ -5,6 +5,7 @@ mod license;
 mod output;
 mod present;
 mod production;
+mod songs;
 
 use bible::{
     db::BibleDb,
@@ -47,11 +48,19 @@ use production::{
         export_countdown_pack, get_production_preview, get_production_state,
         import_countdown_pack, import_media_file, import_video_file, list_production_countdowns,
         list_production_media, list_production_themes, pause_countdown, resume_countdown,
-        set_auto_transition, set_countdown, set_countdown_schedule, set_media_live,
-        set_output_role, set_output_source, set_production_media, set_scripture_mode,
-        start_countdown, stop_countdown,
+        add_service_plan_item, add_verse_to_service_plan, apply_theme_assignment,
+        clear_service_plan, create_countdown, get_service_plan, remove_service_plan_item,
+        set_auto_transition, set_countdown, set_countdown_rotation, set_countdown_schedule,
+        set_media_live, set_media_settings, set_output_role, set_output_source,
+        set_production_media, set_scripture_mode, start_countdown, stop_countdown,
+        update_countdown,
     },
     ProductionManager,
+};
+
+use songs::{
+    commands::{delete_song, list_songs, save_song},
+    SongStore,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -68,7 +77,13 @@ pub fn run() {
             app.manage(bible_db);
             app.manage(PresentState::new());
             app.manage(OutputManager::new());
-            app.manage(ProductionManager::new());
+            let production = ProductionManager::new();
+            production.init_library(&app_dir);
+            app.manage(production);
+
+            let song_store = SongStore::new();
+            song_store.init(&app_dir);
+            app.manage(song_store);
             ProductionManager::start_compositor(app.handle().clone());
 
             // Licensing — load any stored token before the window opens
@@ -164,6 +179,20 @@ pub fn run() {
             import_media_file,
             import_video_file,
             set_countdown_schedule,
+            set_countdown_rotation,
+            create_countdown,
+            update_countdown,
+            set_media_settings,
+            apply_theme_assignment,
+            get_service_plan,
+            add_service_plan_item,
+            remove_service_plan_item,
+            clear_service_plan,
+            add_verse_to_service_plan,
+            // Songs
+            list_songs,
+            save_song,
+            delete_song,
             // Licensing
             activate_license,
             deactivate_license,

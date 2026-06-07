@@ -4,11 +4,12 @@ import type {
   InstallBibleRequest,
   PresentConfig, PreviewResult,
   OutputInfo, MonitorInfo, OutputRole, OutputSource, RoleLayout, ScriptureMode,
-  TransitionTarget, CountdownSchedule,
+  TransitionTarget, CountdownSchedule, CountdownRotation, CountdownDef,
+  MediaSettings, ServicePlan, ServicePlanItem, Song,
   NdiSourceInfo,
   LicenseStatus,
   Highlight, Note, Bookmark, Tag,
-  CountdownDef, MediaDef, ProductionTheme, ProductionSnapshot, ProductionPreview,
+  MediaDef, ProductionTheme, ProductionSnapshot, ProductionPreview,
 } from './types';
 
 // ── Bible ─────────────────────────────────────────────────────────────────────
@@ -172,6 +173,46 @@ export const importVideoFile = (path: string, title: string, category: string) =
 
 export const setCountdownSchedule = (schedule: CountdownSchedule) =>
   invoke<ProductionSnapshot>('set_countdown_schedule', { schedule });
+
+export const setCountdownRotation = (rotation: CountdownRotation) =>
+  invoke<ProductionSnapshot>('set_countdown_rotation', { rotation });
+
+export const createCountdown = (def: CountdownDef) =>
+  invoke<ProductionSnapshot>('create_countdown', { def });
+
+export const updateCountdown = (def: CountdownDef) =>
+  invoke<ProductionSnapshot>('update_countdown', { def });
+
+export const setMediaSettings = (settings: MediaSettings) =>
+  invoke<ProductionSnapshot>('set_media_settings', { settings });
+
+export const applyThemeAssignment = (contentType: string) =>
+  invoke<ProductionSnapshot>('apply_theme_assignment', { contentType });
+
+export const getServicePlan = () =>
+  invoke<ServicePlan>('get_service_plan');
+
+export const addServicePlanItem = (item: ServicePlanItem) =>
+  invoke<ProductionSnapshot>('add_service_plan_item', { item });
+
+export const removeServicePlanItem = (id: string) =>
+  invoke<ProductionSnapshot>('remove_service_plan_item', { id });
+
+export const clearServicePlan = () =>
+  invoke<ProductionSnapshot>('clear_service_plan');
+
+export const addVerseToServicePlan = (
+  translationId: string, bookId: number, chapter: number, verse: number,
+  reference: string, text: string,
+) => invoke<ProductionSnapshot>('add_verse_to_service_plan', {
+  translationId, bookId, chapter, verse, reference, text,
+});
+
+export const listSongs = () => invoke<Song[]>('list_songs');
+
+export const saveSong = (song: Song) => invoke<Song>('save_song', { song });
+
+export const deleteSong = (id: number) => invoke<void>('delete_song', { id });
 
 // ── Licensing ─────────────────────────────────────────────────────────────────
 

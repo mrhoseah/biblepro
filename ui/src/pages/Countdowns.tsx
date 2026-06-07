@@ -54,12 +54,34 @@ function toTemplate(def: CountdownDef): CountdownTemplate {
   };
 }
 
-const ROTATION_ITEMS = [
-  'Youth Fellowship Friday',
-  'Prayer Meeting Wednesday',
-  'Psalm 122:1 - I was glad when they said unto me...',
-  'Welcome to Grace Church',
-];
+const THEME_FOR_TYPOGRAPHY: Record<TypographyPreset, string> = {
+  'Modern Worship': 'worship-glow',
+  'Conference': 'conference-minimal',
+  'Broadcast': 'broadcast',
+  'Minimal': 'blackout',
+  'Youth': 'youth-energy',
+  'Classic Church': 'classic-church',
+};
+
+function loaderToStyle(loader: LoaderStyle): CountdownDef['style'] {
+  if (loader === 'Ring' || loader === 'Circular') return 'ring';
+  if (['Pulse', 'Wave', 'Particles', 'Progress Bar', 'Minimal Line', 'Segments'].includes(loader)) return 'loader';
+  return 'numeric';
+}
+
+function buildDef(template: CountdownTemplate, nextLoader: LoaderStyle, nextTypography: TypographyPreset): CountdownDef {
+  return {
+    id: template.id,
+    name: template.name,
+    duration: template.duration,
+    style: loaderToStyle(nextLoader),
+    theme_id: THEME_FOR_TYPOGRAPHY[nextTypography],
+    headline: template.headline,
+    subline: template.subline,
+    loader: nextLoader,
+    media_id: template.media_id ?? null,
+  };
+}
 
 function formatTime(seconds: number) {
   const minutes = Math.floor(seconds / 60).toString().padStart(2, '0');
@@ -80,8 +102,29 @@ export default function Countdowns() {
   const leadSecs = scheduleStatus?.schedule.lead_secs ?? 600;
   const autoTransition = production.snapshot?.auto_transition ?? true;
   const transitionTarget = (production.snapshot?.transition_target ?? 'media') as TransitionTarget;
-  const [rotationEnabled, setRotationEnabled] = useState(true);
+  const rotation = production.snapshot?.rotation;
+  const rotationEnabled = rotation?.enabled ?? false;
+  const rotationItems = rotation?.items ?? [];
   const [status, setStatus] = useState('');
+
+  const refreshTemplates = async (pickId?: string) => {
+    const defs = await listProductionCountdowns();
+    const mapped = defs.map(toTemplate);
+    setTemplates(mapped);
+    const next = mapped.find(t => t.id === (pickId ?? selected?.id)) ?? mapped[0] ?? null;
+    if (next) {
+      setSelected(next);
+      setLoader(next.loader as LoaderStyle);
+      setTypography(next.typography);
+    }
+  };
+
+  const applyCountdownOptions = async (nextLoader: LoaderStyle, nextTypography: TypographyPreset) => {
+    if (!selected) return;
+    await production.updateCountdown(buildDef(selected, nextLoader, nextTypography));
+    await refreshTemplates(selected.id);
+    setStatus(`Updated ${selected.name}`);
+  };
 
   useEffect(() => {
     listProductionCountdowns()
@@ -137,10 +180,31 @@ export default function Countdowns() {
             </p>
           </div>
           <div className="flex gap-2">
-            <button className="flex items-center gap-2 rounded-lg border border-bdr bg-surface-800 px-3 py-2 text-xs font-bold text-ink-faint hover:text-ink">
-              <Wand2 size={14} /> Theme Designer
+            <button
+              onClick={async () => {
+                if (!selected) return;
+                await applyCountdownOptions(loader, typography);
+                setStatus('Theme saved to countdown');
+              }}
+              className="flex items-center gap-2 rounded-lg border border-bdr bg-surface-800 px-3 py-2 text-xs font-bold text-ink-faint hover:text-ink"
+            >
+              <Wand2 size={14} /> Save Theme
             </button>
-            <button className="flex items-center gap-2 rounded-lg bg-accent px-3 py-2 text-xs font-black text-surface-950">
+            <button
+              onClick={async () => {
+                if (!selected) return;
+                const id = `custom-${Date.now()}`;
+                const def = {
+                  ...buildDef(selected, loader, typography),
+                  id,
+                  name: `${selected.name} Copy`,
+                };
+                await production.createCountdown(def);
+                await refreshTemplates(id);
+                setStatus(`Created ${def.name}`);
+              }}
+              className="flex items-center gap-2 rounded-lg bg-accent px-3 py-2 text-xs font-black text-surface-950"
+            >
               <AlarmClock size={14} /> New Countdown
             </button>
           </div>
@@ -245,7 +309,10 @@ export default function Countdowns() {
                 {LOADERS.map(item => (
                   <button
                     key={item}
-                    onClick={() => setLoader(item)}
+                    onClick={async () => {
+                      setLoader(item);
+                      await applyCountdownOptions(item, typography);
+                    }}
                     className={[
                       'rounded-lg border px-2 py-2 text-xs font-bold transition-all',
                       loader === item ? 'border-accent bg-accent/10 text-accent' : 'border-bdr bg-surface-900 text-ink-faint hover:text-ink',
@@ -262,7 +329,10 @@ export default function Countdowns() {
                 {TYPOGRAPHY.map(item => (
                   <button
                     key={item}
-                    onClick={() => setTypography(item)}
+                    onClick={async () => {
+                      setTypography(item);
+                      await applyCountdownOptions(loader, item);
+                    }}
                     className={[
                       'flex w-full items-center justify-between rounded-lg border px-3 py-2 text-xs font-bold transition-all',
                       typography === item ? 'border-accent bg-accent/10 text-accent' : 'border-bdr bg-surface-900 text-ink-faint hover:text-ink',
@@ -281,16 +351,26 @@ export default function Countdowns() {
               <div className="mb-3 flex items-center justify-between rounded-lg border border-bdr bg-surface-900 px-3 py-2">
                 <span className="text-xs font-bold text-ink-muted">Announcement + scripture rotation</span>
                 <button
-                  onClick={() => setRotationEnabled(value => !value)}
+                  onClick={async () => {
+                    await production.setCountdownRotation({
+                      enabled: !rotationEnabled,
+                      items: rotationItems,
+                      interval_secs: rotation?.interval_secs ?? 8,
+                    });
+                    setStatus(!rotationEnabled ? 'Rotation enabled on live output' : 'Rotation disabled');
+                  }}
                   className={['rounded px-2 py-1 text-2xs font-black', rotationEnabled ? 'bg-accent text-surface-950' : 'bg-surface-700 text-ink-faint'].join(' ')}
                 >
                   {rotationEnabled ? 'On' : 'Off'}
                 </button>
               </div>
               <div className="space-y-2">
-                {ROTATION_ITEMS.map(item => (
+                {rotationItems.map(item => (
                   <div key={item} className="rounded-lg bg-surface-900 px-3 py-2 text-xs text-ink-muted">{item}</div>
                 ))}
+                {rotationItems.length === 0 && (
+                  <p className="text-xs text-ink-faint">No rotation items configured.</p>
+                )}
               </div>
             </Panel>
 

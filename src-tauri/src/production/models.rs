@@ -11,7 +11,7 @@ pub enum CountdownStyle {
     Theme,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum CountdownStatus {
     Idle,
@@ -73,6 +73,85 @@ impl Default for CountdownSchedule {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MediaPlaylist {
+    pub random_mode: bool,
+    pub interval_secs: u32,
+}
+
+impl Default for MediaPlaylist {
+    fn default() -> Self {
+        Self {
+            random_mode: false,
+            interval_secs: 30,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ThemeAssignment {
+    pub content_type: String,
+    pub media_id: String,
+    pub theme_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MediaSettings {
+    pub playlist: MediaPlaylist,
+    pub theme_assignments: Vec<ThemeAssignment>,
+}
+
+impl Default for MediaSettings {
+    fn default() -> Self {
+        Self {
+            playlist: MediaPlaylist::default(),
+            theme_assignments: vec![
+                ThemeAssignment {
+                    content_type: "scripture".into(),
+                    media_id: "gold-clouds".into(),
+                    theme_id: "classic-church".into(),
+                },
+                ThemeAssignment {
+                    content_type: "songs".into(),
+                    media_id: "blue-motion".into(),
+                    theme_id: "worship-glow".into(),
+                },
+                ThemeAssignment {
+                    content_type: "announcements".into(),
+                    media_id: "purple-prayer".into(),
+                    theme_id: "prayer-soft".into(),
+                },
+                ThemeAssignment {
+                    content_type: "countdowns".into(),
+                    media_id: "conference-lines".into(),
+                    theme_id: "conference-minimal".into(),
+                },
+            ],
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CountdownRotation {
+    pub enabled: bool,
+    pub items: Vec<String>,
+    pub interval_secs: u32,
+}
+
+impl Default for CountdownRotation {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            items: vec![
+                "Welcome to Grace Church".into(),
+                "Psalm 122:1 — I was glad when they said unto me...".into(),
+                "Youth Fellowship Friday".into(),
+            ],
+            interval_secs: 8,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProductionTheme {
     pub id: String,
     pub name: String,
@@ -103,6 +182,9 @@ pub struct ProductionSnapshot {
     pub custom_countdown_count: usize,
     pub custom_media_count: usize,
     pub schedule: super::scheduler::ScheduleStatus,
+    pub rotation: CountdownRotation,
+    pub media_settings: MediaSettings,
+    pub service_plan: super::plan::ServicePlan,
 }
 
 impl Default for ProductionSnapshot {
@@ -123,6 +205,9 @@ impl Default for ProductionSnapshot {
                 seconds_until_start: 0,
                 ready: false,
             },
+            rotation: CountdownRotation::default(),
+            media_settings: MediaSettings::default(),
+            service_plan: super::plan::ServicePlan::default(),
         }
     }
 }

@@ -7,12 +7,18 @@ import {
   setCountdown,
   setAutoTransition,
   setCountdownSchedule,
+  setCountdownRotation,
+  createCountdown,
+  updateCountdown,
   setMediaLive,
   setProductionMedia,
   startCountdown,
   stopCountdown,
 } from '../lib/commands';
-import type { CountdownSchedule, ProductionPreview, ProductionSnapshot, TransitionTarget } from '../lib/types';
+import type {
+  CountdownDef, CountdownRotation, CountdownSchedule,
+  ProductionPreview, ProductionSnapshot, TransitionTarget,
+} from '../lib/types';
 
 export function useProductionEngine(pollMs = 500) {
   const [snapshot, setSnapshot] = useState<ProductionSnapshot | null>(null);
@@ -83,6 +89,21 @@ export function useProductionEngine(pollMs = 500) {
     },
     setCountdownSchedule: async (schedule: CountdownSchedule) => {
       const state = await setCountdownSchedule(schedule);
+      setSnapshot(state);
+      return state;
+    },
+    setCountdownRotation: async (rotation: CountdownRotation) => {
+      const state = await setCountdownRotation(rotation);
+      setSnapshot(state);
+      return state;
+    },
+    createCountdown: async (def: CountdownDef) => {
+      const state = await createCountdown(def);
+      setSnapshot(state);
+      return state;
+    },
+    updateCountdown: async (def: CountdownDef) => {
+      const state = await updateCountdown(def);
       setSnapshot(state);
       return state;
     },

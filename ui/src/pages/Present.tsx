@@ -10,9 +10,9 @@ import {
   getOutputs,
   getPresentationPreview,
   listNdiSources,
-  pushToAll,
+  pushToAll, addVerseToServicePlan, removeServicePlanItem, clearServicePlan, toggleBookmark,
 } from '../lib/commands';
-import type { NdiSourceInfo, OutputInfo, Verse } from '../lib/types';
+import type { NdiSourceInfo, OutputInfo, ServicePlanItem, Verse } from '../lib/types';
 
 type QueueItem = { id: string; verse: Verse };
 type HistoryEntry = { id: string; verse: Verse; time: string };
@@ -129,11 +129,37 @@ export default function Present() {
     setStatus(connectedSource ? 'Released to presentation' : 'Cleared');
   }, [connectedSource]);
 
+  const servicePlan = production.snapshot?.service_plan;
+
   const addToQueue = useCallback((verse = stagedVerse) => {
     if (!verse) return;
     setQueue(current => [...current, { id: `${Date.now()}-${verse.id}`, verse }]);
     setStatus(`Added ${refOf(verse)} to sermon flow`);
   }, [stagedVerse]);
+
+  const addToServicePlan = useCallback(async (verse = stagedVerse) => {
+    if (!verse) return;
+    await addVerseToServicePlan(
+      verse.translation_id,
+      verse.book_id,
+      verse.chapter,
+      verse.verse,
+      refOf(verse),
+      verse.text,
+    );
+    setStatus(`Added ${refOf(verse)} to service plan`);
+  }, [stagedVerse]);
+
+  const planItemLabel = (item: ServicePlanItem) => {
+    switch (item.kind.type) {
+      case 'verse': return item.kind.reference;
+      case 'song': return item.kind.title;
+      case 'countdown': return item.kind.name;
+      case 'media': return item.kind.title;
+      case 'blank': return item.kind.label;
+      default: return 'Item';
+    }
+  };
 
   const pushQueueItem = useCallback(async (index: number) => {
     const item = queue[index];
@@ -408,19 +434,34 @@ export default function Present() {
                   <h2 className="text-2xl font-black text-ink">Service plan</h2>
                   <p className="mt-1 text-sm text-ink-faint">Prepare scriptures, songs, countdowns, presentations, and announcements before going live.</p>
                 </div>
-                <div className="grid gap-4 md:grid-cols-2">
-                  {[
-                    ['Scripture Queue', `${queue.length} prepared passages`, 'Add staged verses from the navigator.'],
-                    ['Songs', 'Worship set', 'Build the service order from local songs or imported lyrics.'],
-                    ['Countdowns', 'Opening experience', 'Choose a countdown theme and auto-transition behavior.'],
-                    ['Presentations', 'Slides and announcements', 'Prepare imported decks, videos, and welcome slides.'],
-                  ].map(([title, meta, description]) => (
-                    <div key={title} className="rounded-2xl border border-bdr bg-surface-800 p-4">
-                      <p className="text-sm font-black text-ink">{title}</p>
-                      <p className="mt-1 text-xs font-bold text-accent">{meta}</p>
-                      <p className="mt-3 text-xs leading-relaxed text-ink-faint">{description}</p>
+                <div className="mb-4 flex items-center justify-between">
+                  <p className="text-sm font-bold text-ink">{servicePlan?.name ?? 'Service plan'} — {servicePlan?.items.length ?? 0} items</p>
+                  <button
+                    onClick={() => clearServicePlan().then(() => setStatus('Service plan cleared'))}
+                    className="rounded border border-bdr px-3 py-1 text-2xs font-bold text-ink-faint hover:text-danger"
+                  >
+                    Clear plan
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {(servicePlan?.items ?? []).map((item, index) => (
+                    <div key={item.id} className="flex items-center gap-3 rounded-xl border border-bdr bg-surface-800 px-4 py-3">
+                      <span className="flex size-7 items-center justify-center rounded-full bg-surface-700 text-2xs font-black text-ink-faint">{index + 1}</span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-bold text-ink">{planItemLabel(item)}</p>
+                        <p className="text-2xs capitalize text-ink-faint">{item.kind.type}</p>
+                      </div>
+                      <button
+                        onClick={() => removeServicePlanItem(item.id).then(() => setStatus('Removed from plan'))}
+                        className="rounded p-1 text-ink-faint hover:text-danger"
+                      >
+                        <X size={14} />
+                      </button>
                     </div>
                   ))}
+                  {!servicePlan?.items.length && (
+                    <p className="text-sm text-ink-faint">Add staged verses from the sidebar to build your service plan.</p>
+                  )}
                 </div>
               </div>
             </section>
@@ -499,7 +540,13 @@ export default function Present() {
                   <p className="mt-2 text-xs leading-relaxed text-ink-muted">{stagedVerse.text}</p>
                   <div className="mt-3 grid grid-cols-2 gap-2">
                     <button className="rounded border border-bdr px-2 py-1.5 text-2xs font-bold text-ink-faint hover:text-ink">Compare</button>
-                    <button className="rounded border border-bdr px-2 py-1.5 text-2xs font-bold text-ink-faint hover:text-ink">Bookmark</button>
+                    <button
+                      onClick={() => toggleBookmark(stagedVerse.book_id, stagedVerse.chapter, stagedVerse.verse, stagedVerse.book_name, stagedVerse.text)
+                        .then(ok => setStatus(ok ? `Bookmarked ${refOf(stagedVerse)}` : `Removed bookmark`))}
+                      className="rounded border border-bdr px-2 py-1.5 text-2xs font-bold text-ink-faint hover:text-ink"
+                    >
+                      Bookmark
+                    </button>
                   </div>
                 </div>
               ) : (
@@ -514,7 +561,10 @@ export default function Present() {
                 <p className="flex items-center gap-2 text-2xs font-black uppercase tracking-wider text-ink-faint">
                   <ListPlus size={12} /> Scripture Queue
                 </p>
-                <button onClick={() => addToQueue()} className="rounded bg-surface-800 px-2 py-1 text-2xs font-bold text-accent">Add</button>
+                <div className="flex gap-1">
+                  <button onClick={() => addToQueue()} className="rounded bg-surface-800 px-2 py-1 text-2xs font-bold text-accent">Queue</button>
+                  <button onClick={() => addToServicePlan()} className="rounded bg-accent/15 px-2 py-1 text-2xs font-bold text-accent">Plan</button>
+                </div>
               </div>
               <div className="max-h-52 space-y-1 overflow-y-auto">
                 {queue.map((item, index) => (

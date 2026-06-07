@@ -31,15 +31,17 @@ impl Plan {
 
     pub fn label(&self) -> &'static str {
         match self {
-            Plan::Free     => "Free",
+            Plan::Free => "Free",
             Plan::Standard => "Standard",
-            Plan::Premium  => "Premium",
+            Plan::Premium => "Premium",
         }
     }
 }
 
 impl Default for Plan {
-    fn default() -> Self { Plan::Free }
+    fn default() -> Self {
+        Plan::Free
+    }
 }
 
 // ── JWT claims ────────────────────────────────────────────────────────────────

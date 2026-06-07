@@ -1,6 +1,6 @@
+use super::schema::create_schema;
 use rusqlite::Connection;
 use std::sync::Mutex;
-use super::schema::create_schema;
 
 pub struct BibleDb(pub Mutex<Connection>);
 

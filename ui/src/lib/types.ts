@@ -38,6 +38,27 @@ export interface SearchResult {
   snippet: string;
 }
 
+export interface DbStats {
+  translation_count: number;
+  book_count: number;
+  verse_count: number;
+  translations: Translation[];
+}
+
+export interface ImportResult {
+  translation_id: string;
+  verses_imported: number;
+  message: string;
+}
+
+export interface InstallBibleRequest {
+  translation_id: string;
+  translation_name: string;
+  abbreviation: string;
+  language: string;
+  source_url: string;
+}
+
 // ── Present / Config ──────────────────────────────────────────────────────────
 
 export interface Rgba { r: number; g: number; b: number; a: number }
@@ -85,12 +106,21 @@ export type OutputKind =
   | { type: 'ndi'; source_name: string }
   | { type: 'display'; monitor_index: number; monitor_name: string };
 
+export type OutputRole = 'program' | 'preview' | 'confidence' | 'stage' | 'lobby' | 'livestream';
+export type OutputSource = 'auto' | 'presentation' | 'scripture' | 'media' | 'countdown';
+export type RoleLayout = 'auto' | 'full' | 'stage_timer' | 'confidence_text' | 'lobby_countdown' | 'livestream_safe';
+export type ScriptureMode = 'replace' | 'overlay';
+export type TransitionTarget = 'idle' | 'media' | 'stop';
+
 export interface OutputInfo {
   id: string;
   label: string;
   kind: OutputKind;
   enabled: boolean;
   active: boolean;
+  role: OutputRole;
+  source: OutputSource;
+  layout?: RoleLayout;
 }
 
 export interface MonitorInfo {
@@ -145,6 +175,79 @@ export interface Song {
 export interface SongSection {
   label: string; // "Verse 1", "Chorus", "Bridge"
   lyrics: string;
+}
+
+// ── Production engine ─────────────────────────────────────────────────────────
+
+export type CountdownStyle = 'numeric' | 'ring' | 'loader' | 'theme';
+export type CountdownStatus = 'idle' | 'running' | 'paused' | 'ended';
+
+export interface CountdownDef {
+  id: string;
+  name: string;
+  duration: number;
+  style: CountdownStyle;
+  theme_id: string;
+  headline: string;
+  subline: string;
+  loader: string;
+  media_id?: string | null;
+}
+
+export interface CountdownRuntime {
+  def: CountdownDef;
+  status: CountdownStatus;
+  remaining_secs: number;
+}
+
+export interface MediaDef {
+  id: string;
+  title: string;
+  category: string;
+  media_type: string;
+  background: BackgroundDesign;
+  motion_id?: string | null;
+}
+
+export interface CountdownSchedule {
+  enabled: boolean;
+  countdown_id: string;
+  service_at_unix: number;
+  lead_secs: number;
+  fired: boolean;
+}
+
+export interface ScheduleStatus {
+  schedule: CountdownSchedule;
+  seconds_until_start: number;
+  ready: boolean;
+}
+
+export interface ProductionTheme {
+  id: string;
+  name: string;
+  background: BackgroundDesign;
+  headline_color: Rgba;
+  timer_color: Rgba;
+  subline_color: Rgba;
+}
+
+export interface ProductionSnapshot {
+  countdown: CountdownRuntime | null;
+  current_media_id: string | null;
+  media_live: boolean;
+  presentation_connected: boolean;
+  active_layer: 'scripture' | 'countdown' | 'presentation' | 'media' | 'idle' | string;
+  auto_transition: boolean;
+  transition_target: TransitionTarget;
+  scripture_mode: ScriptureMode | string;
+  custom_countdown_count: number;
+  custom_media_count: number;
+  schedule?: ScheduleStatus;
+}
+
+export interface ProductionPreview extends PreviewResult {
+  snapshot: ProductionSnapshot;
 }
 
 // ── Presentation queue ────────────────────────────────────────────────────────

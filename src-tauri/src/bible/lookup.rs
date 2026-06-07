@@ -1,5 +1,5 @@
-use tauri::State;
 use super::{db::BibleDb, models::*};
+use tauri::State;
 
 #[tauri::command]
 pub fn get_translations(db: State<BibleDb>) -> Result<Vec<Translation>, String> {
@@ -140,9 +140,9 @@ pub fn get_verse(
 pub fn get_db_stats(db: State<BibleDb>) -> Result<DbStats, String> {
     let conn = db.0.lock().unwrap();
 
-    let translation_count: i64 =
-        conn.query_row("SELECT COUNT(*) FROM translations", [], |r| r.get(0))
-            .unwrap_or(0);
+    let translation_count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM translations", [], |r| r.get(0))
+        .unwrap_or(0);
     let book_count: i64 = conn
         .query_row("SELECT COUNT(*) FROM books", [], |r| r.get(0))
         .unwrap_or(0);

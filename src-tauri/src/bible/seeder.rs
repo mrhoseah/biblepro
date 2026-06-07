@@ -9,24 +9,78 @@ struct ThiagoBook {
 }
 
 /// Maps thiagobodruk abbreviations → canonical book IDs (1-indexed).
-pub fn abbrev_map_pub() -> HashMap<&'static str, i32> { abbrev_map() }
+pub fn abbrev_map_pub() -> HashMap<&'static str, i32> {
+    abbrev_map()
+}
 
 fn abbrev_map() -> HashMap<&'static str, i32> {
     let pairs = [
-        ("gn", 1), ("ex", 2), ("lv", 3), ("nm", 4), ("dt", 5),
-        ("js", 6), ("jud", 7), ("rt", 8), ("1sm", 9), ("2sm", 10),
-        ("1kgs", 11), ("2kgs", 12), ("1ch", 13), ("2ch", 14), ("ez", 15),
-        ("ne", 16), ("et", 17), ("job", 18), ("ps", 19), ("prv", 20),
-        ("ec", 21), ("sg", 22), ("is", 23), ("jr", 24), ("lm", 25),
-        ("ezk", 26), ("dn", 27), ("ho", 28), ("jl", 29), ("am", 30),
-        ("ob", 31), ("jn", 32), ("mi", 33), ("na", 34), ("hk", 35),
-        ("zp", 36), ("hg", 37), ("zc", 38), ("ml", 39),
-        ("mt", 40), ("mk", 41), ("lk", 42), ("jo", 43), ("act", 44),
-        ("rm", 45), ("1co", 46), ("2co", 47), ("gl", 48), ("ep", 49),
-        ("ph", 50), ("cl", 51), ("1ts", 52), ("2ts", 53), ("1tm", 54),
-        ("2tm", 55), ("tt", 56), ("phm", 57), ("hb", 58), ("jm", 59),
-        ("1pe", 60), ("2pe", 61), ("1jo", 62), ("2jo", 63), ("3jo", 64),
-        ("jd", 65), ("rv", 66),
+        ("gn", 1),
+        ("ex", 2),
+        ("lv", 3),
+        ("nm", 4),
+        ("dt", 5),
+        ("js", 6),
+        ("jud", 7),
+        ("rt", 8),
+        ("1sm", 9),
+        ("2sm", 10),
+        ("1kgs", 11),
+        ("2kgs", 12),
+        ("1ch", 13),
+        ("2ch", 14),
+        ("ez", 15),
+        ("ne", 16),
+        ("et", 17),
+        ("job", 18),
+        ("ps", 19),
+        ("prv", 20),
+        ("ec", 21),
+        ("sg", 22),
+        ("is", 23),
+        ("jr", 24),
+        ("lm", 25),
+        ("ezk", 26),
+        ("dn", 27),
+        ("ho", 28),
+        ("jl", 29),
+        ("am", 30),
+        ("ob", 31),
+        ("jn", 32),
+        ("mi", 33),
+        ("na", 34),
+        ("hk", 35),
+        ("zp", 36),
+        ("hg", 37),
+        ("zc", 38),
+        ("ml", 39),
+        ("mt", 40),
+        ("mk", 41),
+        ("lk", 42),
+        ("jo", 43),
+        ("act", 44),
+        ("rm", 45),
+        ("1co", 46),
+        ("2co", 47),
+        ("gl", 48),
+        ("ep", 49),
+        ("ph", 50),
+        ("cl", 51),
+        ("1ts", 52),
+        ("2ts", 53),
+        ("1tm", 54),
+        ("2tm", 55),
+        ("tt", 56),
+        ("phm", 57),
+        ("hb", 58),
+        ("jm", 59),
+        ("1pe", 60),
+        ("2pe", 61),
+        ("1jo", 62),
+        ("2jo", 63),
+        ("3jo", 64),
+        ("jd", 65),
+        ("rv", 66),
     ];
     pairs.iter().cloned().collect()
 }
@@ -87,7 +141,11 @@ pub fn seed_kjv(conn: &Connection, json_bytes: &[u8]) -> Result<usize, String> {
             for (v_idx, text) in chapter.iter().enumerate() {
                 let verse_num = (v_idx + 1) as i32;
                 stmt.execute(rusqlite::params![
-                    "kjv", book_id, chapter_num, verse_num, text
+                    "kjv",
+                    book_id,
+                    chapter_num,
+                    verse_num,
+                    text
                 ])
                 .map_err(|e| e.to_string())?;
                 count += 1;

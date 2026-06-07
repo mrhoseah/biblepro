@@ -14,8 +14,8 @@ use crate::license::{Feature, LicenseState};
 pub struct PreviewResult {
     /// Base-64 encoded PNG — displayed directly in the UI as a data URI.
     pub png_b64: String,
-    pub width:   u32,
-    pub height:  u32,
+    pub width: u32,
+    pub height: u32,
 }
 
 /// Return the current config.
@@ -88,8 +88,8 @@ pub fn ndi_push_verse(
     let png = frame_to_png(&frame)?;
     Ok(PreviewResult {
         png_b64: B64.encode(&png),
-        width:   frame.width,
-        height:  frame.height,
+        width: frame.width,
+        height: frame.height,
     })
 }
 
@@ -105,8 +105,8 @@ pub fn ndi_preview(
     let png = frame_to_png(&frame)?;
     Ok(PreviewResult {
         png_b64: B64.encode(&png),
-        width:   frame.width,
-        height:  frame.height,
+        width: frame.width,
+        height: frame.height,
     })
 }
 

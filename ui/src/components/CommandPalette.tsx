@@ -3,9 +3,10 @@ import { Search } from 'lucide-react';
 import type { Page } from './Sidebar';
 
 const NAV_ACTIONS: { label: string; page: Page; shortcut?: string }[] = [
-  { label: 'Go to Read',     page: 'Read',     shortcut: 'R' },
   { label: 'Go to Present',  page: 'Present',  shortcut: 'P' },
   { label: 'Go to Songs',    page: 'Songs',    shortcut: 'S' },
+  { label: 'Go to Media',    page: 'Media',    shortcut: 'M' },
+  { label: 'Go to Countdowns', page: 'Countdowns', shortcut: 'C' },
   { label: 'Go to Outputs',  page: 'Outputs',  shortcut: 'O' },
   { label: 'Go to Library',  page: 'Library',  shortcut: 'L' },
   { label: 'Go to Settings', page: 'Settings', shortcut: ',' },

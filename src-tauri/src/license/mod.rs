@@ -3,9 +3,9 @@ pub mod device;
 pub mod keystore;
 pub mod token;
 
-use std::sync::{Arc, RwLock};
-use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
+use std::sync::{Arc, RwLock};
 
 pub use token::{LicenseClaims, Plan};
 
@@ -39,21 +39,21 @@ pub enum Feature {
 impl Feature {
     pub fn required_plan(&self) -> Plan {
         match self {
-            Feature::AdvancedTemplates | Feature::CanvasDesign | Feature::Resolution4K
-                => Plan::Standard,
-            Feature::AiSuggestions | Feature::CloudSync | Feature::MultipleOutputs
-                => Plan::Premium,
+            Feature::AdvancedTemplates | Feature::CanvasDesign | Feature::Resolution4K => {
+                Plan::Standard
+            }
+            Feature::AiSuggestions | Feature::CloudSync | Feature::MultipleOutputs => Plan::Premium,
         }
     }
 
     pub fn display_name(&self) -> &'static str {
         match self {
             Feature::AdvancedTemplates => "Advanced Templates",
-            Feature::CanvasDesign      => "Canvas Background Designer",
-            Feature::Resolution4K      => "4K Output",
-            Feature::AiSuggestions     => "AI Suggestions",
-            Feature::CloudSync         => "Cloud Sync",
-            Feature::MultipleOutputs   => "Multiple NDI Outputs",
+            Feature::CanvasDesign => "Canvas Background Designer",
+            Feature::Resolution4K => "4K Output",
+            Feature::AiSuggestions => "AI Suggestions",
+            Feature::CloudSync => "Cloud Sync",
+            Feature::MultipleOutputs => "Multiple NDI Outputs",
         }
     }
 }
@@ -148,7 +148,9 @@ impl LicenseState {
         let machine = device::machine_id(&self.app_data_dir);
         self.write().device_id = machine.clone();
 
-        let Some(raw) = keystore::load_token() else { return };
+        let Some(raw) = keystore::load_token() else {
+            return;
+        };
 
         match token::verify_token(&raw) {
             Ok(claims) if claims.device_id == machine => {

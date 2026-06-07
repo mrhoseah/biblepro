@@ -41,13 +41,6 @@ struct RefArg<'a> {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct FetchArg<'a> {
-    translation_id: &'a str,
-    reference: &'a str,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
 struct PickImportArg<'a> {
     translation_id: &'a str,
     translation_name: &'a str,
@@ -171,12 +164,6 @@ pub async fn cmd_search_by_reference(translation_id: &str, reference: &str) -> O
         to_js(&RefArg { translation_id, reference }),
     ).await)
     .flatten()
-}
-
-pub async fn cmd_fetch_and_cache(translation_id: &str, reference: &str) -> Option<String> {
-    invoke("fetch_and_cache_passage", to_js(&FetchArg { translation_id, reference }))
-        .await
-        .as_string()
 }
 
 // ── present / NDI types ───────────────────────────────────────────────────────

@@ -1,7 +1,8 @@
 use rusqlite::{Connection, Result};
 
 pub fn create_schema(conn: &Connection) -> Result<()> {
-    conn.execute_batch("
+    conn.execute_batch(
+        "
         PRAGMA journal_mode=WAL;
         PRAGMA foreign_keys=ON;
 
@@ -55,10 +56,12 @@ pub fn create_schema(conn: &Connection) -> Result<()> {
             INSERT INTO verses_fts(rowid, text, translation_id)
             VALUES (new.id, new.text, new.translation_id);
         END;
-    ")?;
+    ",
+    )?;
 
     // ── Study tables ──────────────────────────────────────────────────────────
-    conn.execute_batch("
+    conn.execute_batch(
+        "
         CREATE TABLE IF NOT EXISTS highlights (
             book_id  INTEGER NOT NULL,
             chapter  INTEGER NOT NULL,
@@ -129,7 +132,8 @@ pub fn create_schema(conn: &Connection) -> Result<()> {
             completed_at INTEGER,
             PRIMARY KEY (plan_id, day)
         );
-    ")?;
+    ",
+    )?;
 
     seed_books(conn)?;
     Ok(())
@@ -153,71 +157,71 @@ fn seed_books(conn: &Connection) -> Result<()> {
 
 fn canonical_books() -> Vec<(i32, &'static str, &'static str, &'static str)> {
     vec![
-        (1,  "Genesis",          "Gen", "OT"),
-        (2,  "Exodus",           "Exo", "OT"),
-        (3,  "Leviticus",        "Lev", "OT"),
-        (4,  "Numbers",          "Num", "OT"),
-        (5,  "Deuteronomy",      "Deu", "OT"),
-        (6,  "Joshua",           "Jos", "OT"),
-        (7,  "Judges",           "Jdg", "OT"),
-        (8,  "Ruth",             "Rut", "OT"),
-        (9,  "1 Samuel",         "1Sa", "OT"),
-        (10, "2 Samuel",         "2Sa", "OT"),
-        (11, "1 Kings",          "1Ki", "OT"),
-        (12, "2 Kings",          "2Ki", "OT"),
-        (13, "1 Chronicles",     "1Ch", "OT"),
-        (14, "2 Chronicles",     "2Ch", "OT"),
-        (15, "Ezra",             "Ezr", "OT"),
-        (16, "Nehemiah",         "Neh", "OT"),
-        (17, "Esther",           "Est", "OT"),
-        (18, "Job",              "Job", "OT"),
-        (19, "Psalms",           "Psa", "OT"),
-        (20, "Proverbs",         "Pro", "OT"),
-        (21, "Ecclesiastes",     "Ecc", "OT"),
-        (22, "Song of Solomon",  "Sol", "OT"),
-        (23, "Isaiah",           "Isa", "OT"),
-        (24, "Jeremiah",         "Jer", "OT"),
-        (25, "Lamentations",     "Lam", "OT"),
-        (26, "Ezekiel",          "Eze", "OT"),
-        (27, "Daniel",           "Dan", "OT"),
-        (28, "Hosea",            "Hos", "OT"),
-        (29, "Joel",             "Joe", "OT"),
-        (30, "Amos",             "Amo", "OT"),
-        (31, "Obadiah",          "Oba", "OT"),
-        (32, "Jonah",            "Jon", "OT"),
-        (33, "Micah",            "Mic", "OT"),
-        (34, "Nahum",            "Nah", "OT"),
-        (35, "Habakkuk",         "Hab", "OT"),
-        (36, "Zephaniah",        "Zep", "OT"),
-        (37, "Haggai",           "Hag", "OT"),
-        (38, "Zechariah",        "Zec", "OT"),
-        (39, "Malachi",          "Mal", "OT"),
-        (40, "Matthew",          "Mat", "NT"),
-        (41, "Mark",             "Mar", "NT"),
-        (42, "Luke",             "Luk", "NT"),
-        (43, "John",             "Joh", "NT"),
-        (44, "Acts",             "Act", "NT"),
-        (45, "Romans",           "Rom", "NT"),
-        (46, "1 Corinthians",    "1Co", "NT"),
-        (47, "2 Corinthians",    "2Co", "NT"),
-        (48, "Galatians",        "Gal", "NT"),
-        (49, "Ephesians",        "Eph", "NT"),
-        (50, "Philippians",      "Phi", "NT"),
-        (51, "Colossians",       "Col", "NT"),
-        (52, "1 Thessalonians",  "1Th", "NT"),
-        (53, "2 Thessalonians",  "2Th", "NT"),
-        (54, "1 Timothy",        "1Ti", "NT"),
-        (55, "2 Timothy",        "2Ti", "NT"),
-        (56, "Titus",            "Tit", "NT"),
-        (57, "Philemon",         "Phm", "NT"),
-        (58, "Hebrews",          "Heb", "NT"),
-        (59, "James",            "Jam", "NT"),
-        (60, "1 Peter",          "1Pe", "NT"),
-        (61, "2 Peter",          "2Pe", "NT"),
-        (62, "1 John",           "1Jo", "NT"),
-        (63, "2 John",           "2Jo", "NT"),
-        (64, "3 John",           "3Jo", "NT"),
-        (65, "Jude",             "Jud", "NT"),
-        (66, "Revelation",       "Rev", "NT"),
+        (1, "Genesis", "Gen", "OT"),
+        (2, "Exodus", "Exo", "OT"),
+        (3, "Leviticus", "Lev", "OT"),
+        (4, "Numbers", "Num", "OT"),
+        (5, "Deuteronomy", "Deu", "OT"),
+        (6, "Joshua", "Jos", "OT"),
+        (7, "Judges", "Jdg", "OT"),
+        (8, "Ruth", "Rut", "OT"),
+        (9, "1 Samuel", "1Sa", "OT"),
+        (10, "2 Samuel", "2Sa", "OT"),
+        (11, "1 Kings", "1Ki", "OT"),
+        (12, "2 Kings", "2Ki", "OT"),
+        (13, "1 Chronicles", "1Ch", "OT"),
+        (14, "2 Chronicles", "2Ch", "OT"),
+        (15, "Ezra", "Ezr", "OT"),
+        (16, "Nehemiah", "Neh", "OT"),
+        (17, "Esther", "Est", "OT"),
+        (18, "Job", "Job", "OT"),
+        (19, "Psalms", "Psa", "OT"),
+        (20, "Proverbs", "Pro", "OT"),
+        (21, "Ecclesiastes", "Ecc", "OT"),
+        (22, "Song of Solomon", "Sol", "OT"),
+        (23, "Isaiah", "Isa", "OT"),
+        (24, "Jeremiah", "Jer", "OT"),
+        (25, "Lamentations", "Lam", "OT"),
+        (26, "Ezekiel", "Eze", "OT"),
+        (27, "Daniel", "Dan", "OT"),
+        (28, "Hosea", "Hos", "OT"),
+        (29, "Joel", "Joe", "OT"),
+        (30, "Amos", "Amo", "OT"),
+        (31, "Obadiah", "Oba", "OT"),
+        (32, "Jonah", "Jon", "OT"),
+        (33, "Micah", "Mic", "OT"),
+        (34, "Nahum", "Nah", "OT"),
+        (35, "Habakkuk", "Hab", "OT"),
+        (36, "Zephaniah", "Zep", "OT"),
+        (37, "Haggai", "Hag", "OT"),
+        (38, "Zechariah", "Zec", "OT"),
+        (39, "Malachi", "Mal", "OT"),
+        (40, "Matthew", "Mat", "NT"),
+        (41, "Mark", "Mar", "NT"),
+        (42, "Luke", "Luk", "NT"),
+        (43, "John", "Joh", "NT"),
+        (44, "Acts", "Act", "NT"),
+        (45, "Romans", "Rom", "NT"),
+        (46, "1 Corinthians", "1Co", "NT"),
+        (47, "2 Corinthians", "2Co", "NT"),
+        (48, "Galatians", "Gal", "NT"),
+        (49, "Ephesians", "Eph", "NT"),
+        (50, "Philippians", "Phi", "NT"),
+        (51, "Colossians", "Col", "NT"),
+        (52, "1 Thessalonians", "1Th", "NT"),
+        (53, "2 Thessalonians", "2Th", "NT"),
+        (54, "1 Timothy", "1Ti", "NT"),
+        (55, "2 Timothy", "2Ti", "NT"),
+        (56, "Titus", "Tit", "NT"),
+        (57, "Philemon", "Phm", "NT"),
+        (58, "Hebrews", "Heb", "NT"),
+        (59, "James", "Jam", "NT"),
+        (60, "1 Peter", "1Pe", "NT"),
+        (61, "2 Peter", "2Pe", "NT"),
+        (62, "1 John", "1Jo", "NT"),
+        (63, "2 John", "2Jo", "NT"),
+        (64, "3 John", "3Jo", "NT"),
+        (65, "Jude", "Jud", "NT"),
+        (66, "Revelation", "Rev", "NT"),
     ]
 }

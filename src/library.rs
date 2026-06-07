@@ -238,12 +238,6 @@ pub fn LibraryView(mut stats: Signal<Option<DbStats>>, mut translations: Signal<
     let mut pick_status: Signal<String> = use_signal(String::new);
     let mut picking:     Signal<bool>   = use_signal(|| false);
 
-    // Quick fetch (single verse test)
-    let mut fetch_ref:    Signal<String> = use_signal(String::new);
-    let mut fetch_trans:  Signal<String> = use_signal(|| "kjv".to_string());
-    let mut fetch_status: Signal<String> = use_signal(String::new);
-    let mut fetching:     Signal<bool>   = use_signal(|| false);
-
     // API.Bible state
     let mut api_key:       Signal<String>          = use_signal(String::new);
     let mut api_key_draft: Signal<String>          = use_signal(String::new);
@@ -849,58 +843,6 @@ pub fn LibraryView(mut stats: Signal<Option<DbStats>>, mut translations: Signal<
                                    else if pick_status().contains("failed") || pick_status().contains("Error") { "import-status error" }
                                    else { "import-status" },
                             "{pick_status}"
-                        }
-                    }
-                }
-
-                // Quick fetch (single verse test)
-                div { class: "quick-fetch-wrap",
-                    div { class: "lib-section-title", "Quick Fetch — Test a Verse" }
-                    p { class: "qf-hint",
-                        "Cache a single verse from bible-api.com to verify a translation ID before importing."
-                    }
-                    div { class: "fetch-row",
-                        input {
-                            class: "search-input",
-                            placeholder: "e.g. John 3:16",
-                            value: "{fetch_ref}",
-                            oninput: move |e| fetch_ref.set(e.value()),
-                        }
-                        input {
-                            class: "search-input",
-                            style: "max-width:90px;",
-                            placeholder: "Trans ID",
-                            value: "{fetch_trans}",
-                            oninput: move |e| fetch_trans.set(e.value()),
-                        }
-                        button {
-                            class: "btn-ghost",
-                            disabled: fetching(),
-                            onclick: move |_| {
-                                let reference = fetch_ref();
-                                let trans_id  = fetch_trans();
-                                if reference.trim().is_empty() { return; }
-                                spawn(async move {
-                                    fetching.set(true);
-                                    fetch_status.set("Fetching…".to_string());
-                                    match cmd_fetch_and_cache(&trans_id, &reference).await {
-                                        Some(text) => {
-                                            fetch_status.set(format!("✓ {}", text.chars().take(80).collect::<String>()));
-                                            translations.set(cmd_get_translations().await);
-                                            stats.set(cmd_get_db_stats().await);
-                                        }
-                                        None => fetch_status.set("Fetch failed — check reference and network.".to_string()),
-                                    }
-                                    fetching.set(false);
-                                });
-                            },
-                            if fetching() { "…" } else { "Fetch" }
-                        }
-                    }
-                    if !fetch_status().is_empty() {
-                        div {
-                            class: if fetch_status().starts_with("✓") { "import-status ok" } else { "import-status error" },
-                            "{fetch_status}"
                         }
                     }
                 }

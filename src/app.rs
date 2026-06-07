@@ -45,7 +45,7 @@ pub fn App() -> Element {
                 }
             },
             Header { active_view }
-            div { class: "workspace",
+            div { class: "organization",
                 match active_view() {
                     View::Reader  => rsx! { ReaderView { books, translations } },
                     View::Search  => rsx! { SearchView { books, translations } },

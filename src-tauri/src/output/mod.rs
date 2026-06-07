@@ -1,27 +1,32 @@
 pub mod commands;
 pub mod ndi_recv;
+pub mod role_layouts;
+pub mod routing;
 
-use std::sync::{Arc, Mutex};
-use std::sync::atomic::{AtomicBool, Ordering};
-use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Manager, WebviewWindowBuilder, WebviewUrl};
+pub use role_layouts::RoleLayout;
+
 use base64::{engine::general_purpose::STANDARD as B64, Engine};
+use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 
 use crate::present::config::PresentConfig;
 use crate::present::ndi::NdiSender;
-use crate::present::renderer::{render_frame, frame_to_png, Frame};
+use crate::present::renderer::{frame_to_png, render_frame, render_scripture_overlay, Frame};
+use routing::{LayerFrames, OutputRole, OutputSource, ScriptureMode};
 use ndi_recv::{NdiReceiver, ReceivedFrame};
 
 // ── Monitor info ──────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MonitorInfo {
-    pub index:      usize,
-    pub name:       String,
-    pub width:      u32,
-    pub height:     u32,
-    pub x:          i32,
-    pub y:          i32,
+    pub index: usize,
+    pub name: String,
+    pub width: u32,
+    pub height: u32,
+    pub x: i32,
+    pub y: i32,
     pub is_primary: bool,
 }
 
@@ -30,75 +35,125 @@ pub struct MonitorInfo {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum OutputKind {
-    Ndi     { source_name: String },
-    Display { monitor_index: usize, monitor_name: String },
+    Ndi {
+        source_name: String,
+    },
+    Display {
+        monitor_index: usize,
+        monitor_name: String,
+    },
 }
 
 /// Serialisable status sent to the frontend.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OutputInfo {
-    pub id:      String,
-    pub label:   String,
-    pub kind:    OutputKind,
+    pub id: String,
+    pub label: String,
+    pub kind: OutputKind,
     pub enabled: bool,
-    pub active:  bool,
+    pub active: bool,
+    pub role: OutputRole,
+    pub source: OutputSource,
+    #[serde(default)]
+    pub layout: RoleLayout,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RoutingSnapshot {
+    pub scripture_mode: ScriptureMode,
+    pub live_verse_active: bool,
 }
 
 /// Push result mirrors PresentResult — includes PNG preview.
 #[derive(Debug, Serialize)]
 pub struct PushResult {
     pub png_b64: String,
-    pub width:   u32,
-    pub height:  u32,
+    pub width: u32,
+    pub height: u32,
 }
 
 // ── Internal entry (not serialised) ──────────────────────────────────────────
 
 struct OutputEntry {
-    info:         OutputInfo,
-    ndi_sender:   Option<NdiSender>,
+    info: OutputInfo,
+    ndi_sender: Option<NdiSender>,
     window_label: Option<String>,
 }
 
 // ── Presentation source ───────────────────────────────────────────────────────
 
 struct PresentationSource {
-    receiver:  NdiReceiver,
-    // Background thread pushes presentation frames to all outputs when
-    // verse_active is false. Dropping this signals the thread to stop.
-    _thread:   std::thread::JoinHandle<()>,
-    thread_stop: Arc<AtomicBool>,
-}
-
-impl Drop for PresentationSource {
-    fn drop(&mut self) {
-        self.thread_stop.store(true, Ordering::Relaxed);
-    }
+    receiver: NdiReceiver,
 }
 
 // ── OutputManager ─────────────────────────────────────────────────────────────
 
 pub struct OutputManager {
-    // Arc so the background compositor thread can hold a reference.
-    outputs:      Arc<Mutex<Vec<OutputEntry>>>,
+    outputs: Arc<Mutex<Vec<OutputEntry>>>,
     presentation: Mutex<Option<PresentationSource>>,
-    /// True while a Scripture verse is live; background compositor pauses.
     pub verse_active: Arc<AtomicBool>,
+    pub scripture_mode: Mutex<ScriptureMode>,
+    pub live_verse: Mutex<Option<(String, String)>>,
 }
 
 impl OutputManager {
     pub fn new() -> Self {
         Self {
-            outputs:      Arc::new(Mutex::new(Vec::new())),
+            outputs: Arc::new(Mutex::new(Vec::new())),
             presentation: Mutex::new(None),
             verse_active: Arc::new(AtomicBool::new(false)),
+            scripture_mode: Mutex::new(ScriptureMode::Replace),
+            live_verse: Mutex::new(None),
         }
+    }
+
+    pub fn routing_snapshot(&self) -> RoutingSnapshot {
+        RoutingSnapshot {
+            scripture_mode: self.scripture_mode.lock().unwrap().clone(),
+            live_verse_active: self.live_verse.lock().unwrap().is_some(),
+        }
+    }
+
+    pub fn set_scripture_mode(&self, mode: ScriptureMode) {
+        *self.scripture_mode.lock().unwrap() = mode;
+    }
+
+    pub fn set_output_role(&self, id: &str, role: OutputRole) -> Result<OutputInfo, String> {
+        let mut outputs = self.outputs.lock().unwrap();
+        let entry = outputs
+            .iter_mut()
+            .find(|e| e.info.id == id)
+            .ok_or_else(|| format!("Output '{id}' not found"))?;
+        entry.info.role = role;
+        Ok(entry.info.clone())
+    }
+
+    pub fn set_output_source(&self, id: &str, source: OutputSource) -> Result<OutputInfo, String> {
+        let mut outputs = self.outputs.lock().unwrap();
+        let entry = outputs
+            .iter_mut()
+            .find(|e| e.info.id == id)
+            .ok_or_else(|| format!("Output '{id}' not found"))?;
+        entry.info.source = source;
+        Ok(entry.info.clone())
+    }
+
+    pub fn set_output_layout(&self, id: &str, layout: RoleLayout) -> Result<OutputInfo, String> {
+        let mut outputs = self.outputs.lock().unwrap();
+        let entry = outputs
+            .iter_mut()
+            .find(|e| e.info.id == id)
+            .ok_or_else(|| format!("Output '{id}' not found"))?;
+        entry.info.layout = layout;
+        Ok(entry.info.clone())
     }
 
     // ── read ──────────────────────────────────────────────────────────────────
 
     pub fn get_outputs(&self) -> Vec<OutputInfo> {
-        self.outputs.lock().unwrap()
+        self.outputs
+            .lock()
+            .unwrap()
             .iter()
             .map(|e| e.info.clone())
             .collect()
@@ -106,7 +161,12 @@ impl OutputManager {
 
     // ── NDI output ────────────────────────────────────────────────────────────
 
-    pub fn add_ndi(&self, label: String, source_name: String) -> Result<OutputInfo, String> {
+    pub fn add_ndi(
+        &self,
+        label: String,
+        source_name: String,
+        role: OutputRole,
+    ) -> Result<OutputInfo, String> {
         let sender = NdiSender::start(&source_name)?;
         let id = uuid::Uuid::new_v4().to_string();
         let info = OutputInfo {
@@ -115,6 +175,9 @@ impl OutputManager {
             kind: OutputKind::Ndi { source_name },
             enabled: true,
             active: true,
+            role,
+            source: OutputSource::Auto,
+            layout: RoleLayout::Auto,
         };
         self.outputs.lock().unwrap().push(OutputEntry {
             info: info.clone(),
@@ -136,6 +199,7 @@ impl OutputManager {
         y: i32,
         width: u32,
         height: u32,
+        role: OutputRole,
     ) -> Result<OutputInfo, String> {
         let id = uuid::Uuid::new_v4().to_string();
         let win_label = format!("display_{}", id.replace('-', ""));
@@ -157,9 +221,15 @@ impl OutputManager {
         let info = OutputInfo {
             id,
             label,
-            kind: OutputKind::Display { monitor_index, monitor_name },
+            kind: OutputKind::Display {
+                monitor_index,
+                monitor_name,
+            },
             enabled: true,
             active: true,
+            role,
+            source: OutputSource::Auto,
+            layout: RoleLayout::Auto,
         };
         self.outputs.lock().unwrap().push(OutputEntry {
             info: info.clone(),
@@ -173,7 +243,9 @@ impl OutputManager {
 
     pub fn remove(&self, app: &AppHandle, id: &str) -> Result<(), String> {
         let mut outputs = self.outputs.lock().unwrap();
-        let idx = outputs.iter().position(|e| e.info.id == id)
+        let idx = outputs
+            .iter()
+            .position(|e| e.info.id == id)
             .ok_or_else(|| format!("Output '{}' not found", id))?;
         let entry = outputs.remove(idx);
         if let Some(win_label) = &entry.window_label {
@@ -186,7 +258,8 @@ impl OutputManager {
 
     pub fn toggle(&self, id: &str) -> Result<OutputInfo, String> {
         let mut outputs = self.outputs.lock().unwrap();
-        let entry = outputs.iter_mut()
+        let entry = outputs
+            .iter_mut()
             .find(|e| e.info.id == id)
             .ok_or_else(|| format!("Output '{}' not found", id))?;
         entry.info.enabled = !entry.info.enabled;
@@ -201,54 +274,79 @@ impl OutputManager {
     }
 
     /// Connect an NDI source as the presentation background.
-    /// A compositor thread starts immediately and pushes frames to all enabled
-    /// outputs whenever no Scripture verse is active.
+    /// Frames are composited by the global production compositor thread.
     pub fn connect_presentation_source(
         &self,
-        app: AppHandle,
+        _app: AppHandle,
         source_name: String,
     ) -> Result<(), String> {
-        // Stop any existing source first.
         *self.presentation.lock().unwrap() = None;
-
         let receiver = ndi_recv::connect_ndi_source(&source_name)?;
+        *self.presentation.lock().unwrap() = Some(PresentationSource { receiver });
+        Ok(())
+    }
 
-        let outputs_arc   = Arc::clone(&self.outputs);
-        let verse_active  = Arc::clone(&self.verse_active);
-        let thread_stop   = Arc::new(AtomicBool::new(false));
-        let thread_stop_t = Arc::clone(&thread_stop);
-        let latest        = receiver.latest.clone();
+    pub fn has_presentation_source(&self) -> bool {
+        self.presentation.lock().unwrap().is_some()
+    }
 
-        let thread = std::thread::spawn(move || {
-            let frame_interval = std::time::Duration::from_millis(33); // ~30 fps
-            let idle_sleep     = std::time::Duration::from_millis(16);
-            loop {
-                if thread_stop_t.load(Ordering::Relaxed) { break; }
+    pub fn latest_presentation_frame(&self) -> Option<ReceivedFrame> {
+        let guard = self.presentation.lock().unwrap();
+        guard.as_ref()?.receiver.latest_frame()
+    }
 
-                if verse_active.load(Ordering::Relaxed) {
-                    // Scripture is live — compositor pauses.
-                    std::thread::sleep(idle_sleep);
-                    continue;
-                }
+    /// Push routed frames to all enabled outputs.
+    pub fn dispatch_routed(&self, app: &AppHandle, layers: &LayerFrames, cfg: &PresentConfig) {
+        let scripture_mode = self.scripture_mode.lock().unwrap().clone();
+        let has_scripture = layers.scripture_full.is_some();
+        let has_countdown = layers.countdown.is_some();
+        let outputs = self.outputs.lock().unwrap();
 
-                let frame_opt = latest.lock().unwrap().clone();
-                match frame_opt {
-                    Some(rf) => {
-                        dispatch_received(&outputs_arc, &app, &rf);
-                        std::thread::sleep(frame_interval);
+        for entry in outputs.iter() {
+            if !entry.info.enabled {
+                continue;
+            }
+            let frame = routing::resolve_output_frame(
+                &entry.info.role,
+                &entry.info.source,
+                &scripture_mode,
+                layers,
+                has_scripture,
+                has_countdown,
+            );
+            let frame = role_layouts::apply_layout(
+                &entry.info.role,
+                &entry.info.layout,
+                frame,
+                layers,
+                cfg,
+            );
+            let uri = frame_to_png(&frame)
+                .ok()
+                .map(|png| format!("data:image/png;base64,{}", B64.encode(&png)));
+            let uri = match uri {
+                Some(u) => u,
+                None => continue,
+            };
+            match &entry.info.kind {
+                OutputKind::Ndi { .. } => {
+                    if let Some(sender) = &entry.ndi_sender {
+                        sender.send(&frame).ok();
                     }
-                    None => std::thread::sleep(idle_sleep),
+                }
+                OutputKind::Display { .. } => {
+                    if let Some(win_label) = &entry.window_label {
+                        if let Some(win) = app.get_webview_window(win_label) {
+                            let js = format!(
+                                "var e=document.getElementById('bp-slide');if(e){{e.src='{}'}}",
+                                uri
+                            );
+                            win.eval(&js).ok();
+                        }
+                    }
                 }
             }
-        });
-
-        *self.presentation.lock().unwrap() = Some(PresentationSource {
-            receiver,
-            _thread: thread,
-            thread_stop,
-        });
-
-        Ok(())
+        }
     }
 
     /// Disconnect the presentation source and stop the compositor thread.
@@ -262,7 +360,11 @@ impl OutputManager {
         let guard = self.presentation.lock().unwrap();
         let rf = guard.as_ref()?.receiver.latest_frame()?;
         drop(guard);
-        let frame = Frame { data: rf.data, width: rf.width, height: rf.height };
+        let frame = Frame {
+            data: rf.data,
+            width: rf.width,
+            height: rf.height,
+        };
         let png = frame_to_png(&frame).ok()?;
         Some(B64.encode(&png))
     }
@@ -278,14 +380,37 @@ impl OutputManager {
         verse_text: &str,
         reference: &str,
         cfg: &PresentConfig,
+        base_frame: Option<&Frame>,
     ) -> Result<PushResult, String> {
         self.verse_active.store(true, Ordering::Relaxed);
-        let frame = render_frame(verse_text, reference, cfg)?;
-        let png   = frame_to_png(&frame)?;
-        let b64   = B64.encode(&png);
-        let data_uri = format!("data:image/png;base64,{}", b64);
-        dispatch_frame(&self.outputs, app, &frame, &data_uri);
-        Ok(PushResult { png_b64: b64, width: frame.width, height: frame.height })
+        *self.live_verse.lock().unwrap() = Some((verse_text.to_string(), reference.to_string()));
+
+        let scripture_full = render_frame(verse_text, reference, cfg)?;
+        let scripture_overlay = if let Some(base) = base_frame {
+            render_scripture_overlay(base, verse_text, reference, cfg).ok()
+        } else {
+            None
+        };
+
+        let layers = LayerFrames {
+            base: base_frame.cloned().unwrap_or_else(|| scripture_full.clone()),
+            scripture_full: Some(scripture_full.clone()),
+            scripture_overlay,
+            countdown: None,
+        };
+        self.dispatch_routed(app, &layers, cfg);
+
+        let preview = match self.scripture_mode.lock().unwrap().clone() {
+            ScriptureMode::Overlay => layers.scripture_overlay.clone().unwrap_or_else(|| scripture_full.clone()),
+            ScriptureMode::Replace => scripture_full.clone(),
+        };
+        let png = frame_to_png(&preview)?;
+        let b64 = B64.encode(&png);
+        Ok(PushResult {
+            png_b64: b64,
+            width: preview.width,
+            height: preview.height,
+        })
     }
 
     /// Clear the live view.
@@ -294,6 +419,7 @@ impl OutputManager {
     /// - Otherwise: pushes a blank frame to all outputs.
     pub fn clear(&self, app: &AppHandle, cfg: &PresentConfig) -> Result<PushResult, String> {
         self.verse_active.store(false, Ordering::Relaxed);
+        *self.live_verse.lock().unwrap() = None;
 
         // With a presentation source, the compositor thread resumes on its own.
         // Return the latest received frame for the operator preview thumbnail.
@@ -302,104 +428,45 @@ impl OutputManager {
             if let Some(src) = guard.as_ref() {
                 if let Some(rf) = src.receiver.latest_frame() {
                     drop(guard);
-                    let frame = Frame { data: rf.data, width: rf.width, height: rf.height };
+                    let frame = Frame {
+                        data: rf.data,
+                        width: rf.width,
+                        height: rf.height,
+                    };
                     if let Ok(png) = frame_to_png(&frame) {
                         let b64 = B64.encode(&png);
-                        return Ok(PushResult { png_b64: b64, width: frame.width, height: frame.height });
+                        return Ok(PushResult {
+                            png_b64: b64,
+                            width: frame.width,
+                            height: frame.height,
+                        });
                     }
                 }
                 // Source connected but no frame received yet.
-                return Ok(PushResult { png_b64: String::new(), width: 0, height: 0 });
+                return Ok(PushResult {
+                    png_b64: String::new(),
+                    width: 0,
+                    height: 0,
+                });
             }
         }
 
         // No presentation source — push a blank frame.
         let frame = render_frame("", "", cfg)?;
-        let png   = frame_to_png(&frame)?;
-        let b64   = B64.encode(&png);
-        let data_uri = format!("data:image/png;base64,{}", b64);
-        dispatch_frame(&self.outputs, app, &frame, &data_uri);
-        Ok(PushResult { png_b64: b64, width: frame.width, height: frame.height })
+        let png = frame_to_png(&frame)?;
+        let b64 = B64.encode(&png);
+        let layers = LayerFrames {
+            base: frame.clone(),
+            scripture_full: None,
+            scripture_overlay: None,
+            countdown: None,
+        };
+        self.dispatch_routed(app, &layers, cfg);
+        Ok(PushResult {
+            png_b64: b64,
+            width: frame.width,
+            height: frame.height,
+        })
     }
 }
 
-// ── dispatch helpers ──────────────────────────────────────────────────────────
-
-/// Push a rendered Scripture frame to all enabled outputs.
-fn dispatch_frame(
-    outputs: &Arc<Mutex<Vec<OutputEntry>>>,
-    app: &AppHandle,
-    frame: &Frame,
-    data_uri: &str,
-) {
-    let outputs = outputs.lock().unwrap();
-    for entry in outputs.iter() {
-        if !entry.info.enabled { continue; }
-        match &entry.info.kind {
-            OutputKind::Ndi { .. } => {
-                if let Some(sender) = &entry.ndi_sender {
-                    sender.send(frame).ok();
-                }
-            }
-            OutputKind::Display { .. } => {
-                if let Some(win_label) = &entry.window_label {
-                    if let Some(win) = app.get_webview_window(win_label) {
-                        let js = format!(
-                            "var e=document.getElementById('bp-slide');if(e){{e.src='{}'}}",
-                            data_uri
-                        );
-                        win.eval(&js).ok();
-                    }
-                }
-            }
-        }
-    }
-}
-
-/// Push a raw received NDI frame to all enabled outputs (compositor thread).
-fn dispatch_received(
-    outputs: &Arc<Mutex<Vec<OutputEntry>>>,
-    app: &AppHandle,
-    rf: &ReceivedFrame,
-) {
-    let frame = Frame { data: rf.data.clone(), width: rf.width, height: rf.height };
-
-    // Convert to PNG once for display outputs (skip if none exist).
-    let display_data_uri: Option<String> = {
-        let has_display = outputs.lock().unwrap()
-            .iter()
-            .any(|e| e.info.enabled && matches!(e.info.kind, OutputKind::Display { .. }));
-        if has_display {
-            frame_to_png(&frame).ok().map(|png| {
-                format!("data:image/png;base64,{}", B64.encode(&png))
-            })
-        } else {
-            None
-        }
-    };
-
-    let outputs = outputs.lock().unwrap();
-    for entry in outputs.iter() {
-        if !entry.info.enabled { continue; }
-        match &entry.info.kind {
-            OutputKind::Ndi { .. } => {
-                if let Some(sender) = &entry.ndi_sender {
-                    sender.send(&frame).ok();
-                }
-            }
-            OutputKind::Display { .. } => {
-                if let Some(uri) = &display_data_uri {
-                    if let Some(win_label) = &entry.window_label {
-                        if let Some(win) = app.get_webview_window(win_label) {
-                            let js = format!(
-                                "var e=document.getElementById('bp-slide');if(e){{e.src='{}'}}",
-                                uri
-                            );
-                            win.eval(&js).ok();
-                        }
-                    }
-                }
-            }
-        }
-    }
-}

@@ -16,26 +16,26 @@ mod ffi {
 
     #[repr(C)]
     pub struct NDISendCreate {
-        pub p_ndi_name:   *const c_char,
-        pub p_groups:     *const c_char,
-        pub clock_video:  bool,
-        pub clock_audio:  bool,
+        pub p_ndi_name: *const c_char,
+        pub p_groups: *const c_char,
+        pub clock_video: bool,
+        pub clock_audio: bool,
     }
 
     #[repr(C)]
     pub struct NDIVideoFrameV2 {
-        pub xres:           c_int,
-        pub yres:           c_int,
-        pub four_cc:        u32,   // BGRA = 0x41524742
-        pub frame_rate_n:   c_int,
-        pub frame_rate_d:   c_int,
+        pub xres: c_int,
+        pub yres: c_int,
+        pub four_cc: u32, // BGRA = 0x41524742
+        pub frame_rate_n: c_int,
+        pub frame_rate_d: c_int,
         pub picture_aspect_ratio: f32,
-        pub frame_format_type:    c_int,
-        pub timecode:       i64,
-        pub p_data:         *const u8,
+        pub frame_format_type: c_int,
+        pub timecode: i64,
+        pub p_data: *const u8,
         pub line_stride_or_size: c_int,
-        pub p_metadata:     *const c_char,
-        pub timestamp:      i64,
+        pub p_metadata: *const c_char,
+        pub timestamp: i64,
     }
 
     // FourCC for RGBA (NDI calls it RGBX/RGBA)
@@ -46,9 +46,7 @@ mod ffi {
     extern "C" {
         pub fn NDIlib_initialize() -> bool;
         pub fn NDIlib_destroy();
-        pub fn NDIlib_send_create(
-            p_create_settings: *const NDISendCreate,
-        ) -> NDISendInstance;
+        pub fn NDIlib_send_create(p_create_settings: *const NDISendCreate) -> NDISendInstance;
         pub fn NDIlib_send_destroy(p_instance: NDISendInstance);
         pub fn NDIlib_send_send_video_v2(
             p_instance: NDISendInstance,
@@ -93,22 +91,25 @@ impl NdiSender {
         }
         let name_c = CString::new(ndi_name).map_err(|e| e.to_string())?;
         let create = ffi::NDISendCreate {
-            p_ndi_name:   name_c.as_ptr(),
-            p_groups:     std::ptr::null(),
-            clock_video:  true,
-            clock_audio:  false,
+            p_ndi_name: name_c.as_ptr(),
+            p_groups: std::ptr::null(),
+            clock_video: true,
+            clock_audio: false,
         };
         let instance = unsafe { ffi::NDIlib_send_create(&create) };
         if instance.is_null() {
             return Err("NDIlib_send_create() returned null".to_string());
         }
-        Ok(Self { inner: Arc::new(Mutex::new(NdiInner { instance })) })
+        Ok(Self {
+            inner: Arc::new(Mutex::new(NdiInner { instance })),
+        })
     }
 
     #[cfg(not(feature = "ndi"))]
     pub fn start(_ndi_name: &str) -> Result<Self, String> {
         Err("BiblePro was not compiled with NDI support. \
-             Add --features ndi and install the NDI SDK.".to_string())
+             Add --features ndi and install the NDI SDK."
+            .to_string())
     }
 
     #[cfg(feature = "ndi")]
@@ -123,18 +124,18 @@ impl NdiSender {
             bgra.push(px[3]); // A
         }
         let vf = ffi::NDIVideoFrameV2 {
-            xres:                 frame.width  as i32,
-            yres:                 frame.height as i32,
-            four_cc:              ffi::FOURCC_RGBA, // NDI SDK accepts BGRA under this
-            frame_rate_n:         30_000,
-            frame_rate_d:         1_001,
+            xres: frame.width as i32,
+            yres: frame.height as i32,
+            four_cc: ffi::FOURCC_RGBA, // NDI SDK accepts BGRA under this
+            frame_rate_n: 30_000,
+            frame_rate_d: 1_001,
             picture_aspect_ratio: frame.width as f32 / frame.height as f32,
-            frame_format_type:    ffi::FRAME_FORMAT_PROGRESSIVE,
-            timecode:             i64::MIN, // auto
-            p_data:               bgra.as_ptr(),
-            line_stride_or_size:  (frame.width * 4) as i32,
-            p_metadata:           std::ptr::null(),
-            timestamp:            i64::MIN,
+            frame_format_type: ffi::FRAME_FORMAT_PROGRESSIVE,
+            timecode: i64::MIN, // auto
+            p_data: bgra.as_ptr(),
+            line_stride_or_size: (frame.width * 4) as i32,
+            p_metadata: std::ptr::null(),
+            timestamp: i64::MIN,
         };
         unsafe { ffi::NDIlib_send_send_video_v2(inner.instance, &vf) };
         Ok(())
@@ -163,7 +164,9 @@ use std::sync::Mutex as StdMutex;
 pub struct NdiState(pub StdMutex<Option<NdiSender>>);
 
 impl NdiState {
-    pub fn new() -> Self { Self(StdMutex::new(None)) }
+    pub fn new() -> Self {
+        Self(StdMutex::new(None))
+    }
 }
 
 // ── convenience: render + send in one call ────────────────────────────────────

@@ -1,12 +1,13 @@
-import { BookOpen, Music, MonitorPlay, Monitor, Library, Settings, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Clock3, Images, Music, MonitorPlay, Monitor, Library, Settings, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 
-export type Page = 'Library' | 'Read' | 'Songs' | 'Present' | 'Outputs' | 'Settings';
+export type Page = 'Library' | 'Songs' | 'Media' | 'Countdowns' | 'Present' | 'Outputs' | 'Settings';
 
 const NAV: { id: Page; Icon: React.ElementType; label: string }[] = [
   { id: 'Library',  Icon: Library,      label: 'Library' },
-  { id: 'Read',     Icon: BookOpen,     label: 'Read' },
   { id: 'Songs',    Icon: Music,        label: 'Songs' },
+  { id: 'Media',    Icon: Images,       label: 'Media' },
+  { id: 'Countdowns', Icon: Clock3,     label: 'Countdowns' },
   { id: 'Present',  Icon: MonitorPlay,  label: 'Present' },
   { id: 'Outputs',  Icon: Monitor,      label: 'Outputs' },
 ];

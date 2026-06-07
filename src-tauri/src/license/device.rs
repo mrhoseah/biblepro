@@ -4,7 +4,6 @@
 /// Strategy: hash multiple stable sources (hostname + platform ID).
 /// We accept partial matches gracefully — a church replacing one component
 /// shouldn't lose their activation; they use the Zehut portal to re-activate.
-
 use sha2::{Digest, Sha256};
 use std::path::Path;
 
@@ -60,7 +59,11 @@ fn platform_id() -> Option<String> {
                 .and_then(|l| {
                     let start = l.find('"')? + 1;
                     let end = l.rfind('"')?;
-                    if start < end { Some(l[start..end].to_string()) } else { None }
+                    if start < end {
+                        Some(l[start..end].to_string())
+                    } else {
+                        None
+                    }
                 })
         })
 }
@@ -76,7 +79,9 @@ fn platform_id() -> Option<String> {
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
-fn platform_id() -> Option<String> { None }
+fn platform_id() -> Option<String> {
+    None
+}
 
 // ── install-scoped UUID fallback ──────────────────────────────────────────────
 
@@ -84,7 +89,9 @@ fn load_or_create_install_id(dir: &Path) -> String {
     let path = dir.join(".install_id");
     if let Ok(id) = std::fs::read_to_string(&path) {
         let trimmed = id.trim().to_string();
-        if !trimmed.is_empty() { return trimmed; }
+        if !trimmed.is_empty() {
+            return trimmed;
+        }
     }
     let id = uuid::Uuid::new_v4().to_string();
     let _ = std::fs::write(&path, &id);

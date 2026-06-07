@@ -1,5 +1,5 @@
-use tauri::State;
 use serde::{Deserialize, Serialize};
+use tauri::State;
 
 use super::{
     device, keystore, now_unix, token, LicenseData, LicenseState, LicenseStatus, CLOUD_API,
@@ -87,7 +87,9 @@ pub async fn refresh_license(state: State<'_, LicenseState>) -> Result<LicenseSt
         let d = state.read();
         if let Some(exp) = d.expires_at {
             let days_left = (exp - now_unix()) / 86400;
-            if days_left > 3 { return Ok(LicenseStatus::from(&*d)); }
+            if days_left > 3 {
+                return Ok(LicenseStatus::from(&*d));
+            }
         }
     }
 
@@ -99,7 +101,11 @@ pub async fn refresh_license(state: State<'_, LicenseState>) -> Result<LicenseSt
     let url = format!("{CLOUD_API}/v1/license/refresh");
     let resp = client
         .post(&url)
-        .json(&RefreshBody { org_id, device_id, current_token: raw })
+        .json(&RefreshBody {
+            org_id,
+            device_id,
+            current_token: raw,
+        })
         .send()
         .await
         .map_err(|e| format!("cloud unreachable: {e}"))?;

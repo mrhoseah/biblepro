@@ -1,15 +1,16 @@
 import { useState, useEffect, useCallback } from 'react';
 import Sidebar, { type Page } from './components/Sidebar';
-import Read from './pages/Read';
 import Present from './pages/Present';
 import Outputs from './pages/Outputs';
 import Songs from './pages/Songs';
+import Media from './pages/Media';
+import Countdowns from './pages/Countdowns';
 import Library from './pages/Library';
 import Settings from './pages/Settings';
 import CommandPalette from './components/CommandPalette';
 
 export default function App() {
-  const [page, setPage] = useState<Page>('Read');
+  const [page, setPage] = useState<Page>('Present');
   const [paletteOpen, setPaletteOpen] = useState(false);
 
   // Global keyboard shortcuts
@@ -37,10 +38,11 @@ export default function App() {
       <Sidebar current={page} onNavigate={navigate} />
 
       <main className="flex-1 overflow-hidden min-w-0">
-        {page === 'Read'     && <Read onPresent={() => navigate('Present')} />}
         {page === 'Present'  && <Present />}
         {page === 'Outputs'  && <Outputs />}
         {page === 'Songs'    && <Songs />}
+        {page === 'Media'    && <Media />}
+        {page === 'Countdowns' && <Countdowns />}
         {page === 'Library'  && <Library />}
         {page === 'Settings' && <Settings />}
       </main>

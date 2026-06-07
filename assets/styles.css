@@ -202,8 +202,8 @@ a:hover { text-decoration: underline; }
 .about-btn:hover  { border-color: var(--accent); color: var(--accent); }
 .about-btn.active { border-color: var(--accent); background: var(--accent-lo); color: var(--accent); }
 
-/* ── workspace ────────────────────────────────────────────────────────────── */
-.workspace { flex: 1; overflow: hidden; display: flex; }
+/* ── organization ────────────────────────────────────────────────────────────── */
+.organization { flex: 1; overflow: hidden; display: flex; }
 
 .sidebar-toggle {
   position: absolute;

@@ -1,6 +1,5 @@
 /// OS-keychain backed token storage via the `keyring` crate.
 /// Wraps Keychain (macOS), Credential Manager (Windows), libsecret (Linux).
-
 use keyring::Entry;
 
 const SERVICE: &str = "biblepro";
@@ -24,7 +23,9 @@ pub fn load_token() -> Option<String> {
 }
 
 pub fn clear_token() {
-    if let Ok(e) = entry(KEY_TOKEN) { let _ = e.delete_credential(); }
+    if let Ok(e) = entry(KEY_TOKEN) {
+        let _ = e.delete_credential();
+    }
     clear_grace_start();
 }
 
@@ -39,11 +40,16 @@ pub fn save_grace_start(unix_secs: i64) -> Result<(), String> {
 }
 
 pub fn load_grace_start() -> Option<i64> {
-    entry(KEY_GRACE_START).ok()?
-        .get_password().ok()?
-        .parse().ok()
+    entry(KEY_GRACE_START)
+        .ok()?
+        .get_password()
+        .ok()?
+        .parse()
+        .ok()
 }
 
 pub fn clear_grace_start() {
-    if let Ok(e) = entry(KEY_GRACE_START) { let _ = e.delete_credential(); }
+    if let Ok(e) = entry(KEY_GRACE_START) {
+        let _ = e.delete_credential();
+    }
 }

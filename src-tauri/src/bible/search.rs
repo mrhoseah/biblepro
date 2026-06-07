@@ -1,5 +1,5 @@
-use tauri::State;
 use super::{db::BibleDb, models::*};
+use tauri::State;
 
 fn fts_search(
     conn: &rusqlite::Connection,
@@ -10,8 +10,7 @@ fn fts_search(
     limit: i32,
 ) -> Result<Vec<SearchResult>, String> {
     // (?N IS NULL OR col = ?N) lets optional filters be passed as NULL
-    let sql =
-        "SELECT v.id, v.translation_id, v.book_id, b.name, v.chapter, v.verse, v.text,
+    let sql = "SELECT v.id, v.translation_id, v.book_id, b.name, v.chapter, v.verse, v.text,
                 highlight(verses_fts, 0, '\u{ab}', '\u{bb}')
          FROM verses_fts
          JOIN verses v ON verses_fts.rowid = v.id
